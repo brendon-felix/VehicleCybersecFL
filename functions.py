@@ -43,7 +43,7 @@ def prepare_train_data(syncan_dir, start_time=0, end_time=None, msg_id=None):
     else:
         id_df = df[df.ID==msg_id]
         id_df = id_df.dropna(axis=1, how='all')
-        print(f'{msg_id.upper()}: {len(id_df):,} messages')
+        print(f'{msg_id.upper()}: {len(id_df):,} messages used')
         return id_df
 
 
