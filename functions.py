@@ -10,11 +10,11 @@ import matplotlib.pyplot as plt
 
 def train_csv2df(dir_path): # imports training files into a dataframe
     data_frames = []
-    csv_path = dir_path + '/train_1.csv'    # train 1 contains header
+    csv_path = dir_path + 'train_1.csv'    # train 1 contains header
     df_temp = pd.read_csv(csv_path)
     data_frames.append(df_temp)
     for i in range(2, 5):
-        csv_path = dir_path + '/train_' + str(i) + '.csv'
+        csv_path = dir_path + 'train_' + str(i) + '.csv'
         df_temp = pd.read_csv(csv_path, header=None, names=['Label',  'Time', 'ID',
                                                             'Signal1', 'Signal2',  'Signal3', 'Signal4'])
         data_frames.append(df_temp)
