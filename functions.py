@@ -185,16 +185,53 @@ def sequences_from_indices(array, indices_ds, start_index, end_index):
 
 
 
-def reconstruct(ds, model_path, time_steps, seq_stride): # used for reconstructing signals with a saved model into a continuous dataframe
+def SynCAN_train_ds(df):
+    values = df.to_numpy()[:,3:].astype(np.float32)
+    ds = timeseries_dataset(
+        values,
+        None,
+        data_is_target = True,
+        warm_up = WARM_UP,
+        sequence_length = TIME_STEPS,
+        sequence_stride = SEQ_STRIDE,
+        # batch_size = BATCH_SIZE
+    )
+    return ds
+
+
+
+def get_centralized_datasets(df):
+    data_length = len(df)
+    train_size = ((int(data_length*TRAIN_SPLIT) // SEQ_STRIDE) * SEQ_STRIDE) + WARM_UP
+    val_size = ((int(data_length*VAL_SPLIT) // SEQ_STRIDE) * SEQ_STRIDE) + WARM_UP
+    test_size = (((data_length - train_size - val_size) // SEQ_STRIDE) * SEQ_STRIDE) + WARM_UP
+
+    train_df = df.iloc[:train_size]
+    val_df = df[train_size:train_size+val_size]
+    test_df = df.iloc[-test_size:]
+
+    train_ds = SynCAN_train_ds(train_df)
+    val_ds = SynCAN_train_ds(val_df)
+    test_ds = SynCAN_train_ds(test_df)
+
+    datasets = {'train': train_ds, 'val': val_ds, 'test': test_ds}
+    dataframes = {'train': train_df.iloc[WARM_UP:], 'val': val_df.iloc[WARM_UP:], 'test': test_df.iloc[WARM_UP:]}
+    for key, item in datasets.items():
+        print(f"{key.upper()}: \t{item.__len__().numpy():,} subsequences of length {TIME_STEPS}")
+    return datasets, dataframes
+
+
+
+def reconstruct(ds, model_path): # used for reconstructing signals with a saved model into a continuous dataframe
     saved_model = tf.keras.models.load_model(model_path)
     reconstruction = saved_model.predict(ds, verbose=1, workers=-1, use_multiprocessing=True)
-    if time_steps == seq_stride:
+    if TIME_STEPS == SEQ_STRIDE:
         reconstruction = reconstruction.reshape(-1, reconstruction.shape[-1])
     else:
         # remove duplicate timesteps from predictions
         # first = reconstruction[0,:TIME_STEPS-SEQ_STRIDE]    # e.g. [0..10] out of [0..20]
         first = reconstruction[0]
-        rest = reconstruction[1:, time_steps-seq_stride:]    # e.g. [10..20],[20..30].. out of [10..30],[20..40]..
+        rest = reconstruction[1:, TIME_STEPS-SEQ_STRIDE:]    # e.g. [10..20],[20..30].. out of [10..30],[20..40]..
         rest = rest.reshape(-1, rest.shape[-1])             # e.g. [10....len(df)]
         reconstruction = np.concatenate((first, rest))      # e.g. [0....len(df)]
     columns = ['Signal'+str(i+1) for i in range(reconstruction.shape[-1])]
@@ -325,6 +362,34 @@ def create_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
         metrics=[METRIC])
     model.summary()
     return model
+
+
+
+def train_model(model, train_ds, val_ds=None, plot=False, evaluate=False):
+    history = model.fit(train_ds,
+                    epochs=EPOCHS,
+                    validation_data=val_ds,
+                    use_multiprocessing=True,
+                    workers=6,
+                    batch_size=BATCH_SIZE,
+                    shuffle=True,
+                    callbacks=callbacks_list)
+    if plot:
+        plt.plot(history.history['loss'])
+        plt.plot(history.history['val_loss'])
+        plt.title('model loss')
+        plt.ylabel('loss')
+        plt.xlabel('epoch')
+        plt.legend(['train', 'test'], loc='upper left')
+        plt.show()
+    if evaluate:
+        print('Evaluating...")
+        loss, metric = model.evaluate(test_ds, verbose=0)
+        print(f'Test loss: {loss:.5}\nTest {METRIC}: {metric:.5}')        # current best: 8.8552e-05
+    return
+    
+
+
 
 def plot_error_thresholds(thresholds, squared_error):
     for signal in range(squared_error.shape[-1]): # Plot histograms of squared error values and mean + threshold lines
