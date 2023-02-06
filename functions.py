@@ -8,6 +8,28 @@ import matplotlib.pyplot as plt
 # !unzip ./SynCAN/\*.zip -d ./SynCAN/. &> /dev/null
 # !rm ./SynCAN/*.zip &> /dev/null
 
+ID = 5
+MSG_ID = 'id'+str(ID)      # each message contains 1-4 signals that are associated with the specified message ID
+NUM_SIGNALS = signal_counts[ID-1]
+TRAIN_SPLIT = 0.8
+VAL_SPLIT = 0.1
+WARM_UP = 20
+TIME_STEPS = 100
+# SEQ_STRIDE = TIME_STEPS // 2 # must be <= TIME_STEPS
+SEQ_STRIDE = TIME_STEPS
+EPOCHS = 3
+BATCH_SIZE = 64
+LEARNING_RATE = 0.001
+DROP_OUT = True
+LOSS_FUNCTION = 'mse'
+METRIC = 'binary_crossentropy'
+PATIENCE = 1
+LATENT_DIM = 32 * NUM_SIGNALS
+DIRECTORY = "/content/drive/MyDrive/Colab Notebooks/models/cids/"
+FILEPATH = DIRECTORY+MSG_ID+"_model_"+str(TIME_STEPS)+'-'+str(WARM_UP)+".h5"
+EVAL_SET = 'continuous'
+# PNGFILEPATH = DIRECTORY+MSG_ID+"_model.png"
+
 def train_csv2df(dir_path): # imports training files into a dataframe
     data_frames = []
     csv_path = dir_path + 'train_1.csv'    # train 1 contains header
@@ -258,3 +280,43 @@ def visualize_reconstructed_signal(in_df, out_df, start_time=0, end_time=None, p
     plt.tight_layout()
     plt.show()
     return
+
+
+
+def get_CIDS_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
+    inputs = layers.Input(shape=(time_steps+warm_up, input_dim)) # shape = (time_steps, data_dimension/num_features)
+    # encoder
+    x = layers.Dense(latent_dim*2, activation='tanh')(inputs)
+    if drop_out: x = layers.Dropout(0.2)(x)
+    enc_out, enc_hidden = layers.GRU(latent_dim, return_sequences=True, return_state=True, activation="tanh")(x)
+    if drop_out:
+        enc_out = layers.Dropout(0.2)(enc_out)
+        enc_hidden = layers.Dropout(0.2)(enc_hidden)
+    # decoder
+    dec_out , dec_hidden = layers.GRU(latent_dim, return_sequences=True, return_state=True, activation="tanh")(enc_out)
+    if drop_out:
+        dec_out = layers.Dropout(0.2)(dec_out)
+        dec_hidden = layers.Dropout(0.2)(dec_hidden)
+    outputs = layers.Lambda(lambda x: x[:, warm_up:, :])(dec_out)   # used to remove the warm start time steps from the predictions
+    outputs = layers.Dense(input_dim, activation='tanh')(outputs)
+    model = tf.keras.Model(inputs, outputs)
+    return model
+
+
+
+def create_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
+    model = get_CIDS_model(time_steps, warm_up, input_dim, latent_dim, drop_out)
+    callbacks_list = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=PATIENCE,),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=FILEPATH,
+            monitor="val_loss",
+            save_best_only=True)]
+
+    model.compile(optimizer=tf.optimizers.Adam(learning_rate=LEARNING_RATE),
+        loss=LOSS_FUNCTION,
+        metrics=[METRIC])
+    model.summary()
+    return model
