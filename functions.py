@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from keras import layers
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Download SynCAN dataset from the ETAS github
@@ -324,3 +325,21 @@ def create_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
         metrics=[METRIC])
     model.summary()
     return model
+
+def plot_error_thresholds(thresholds, squared_error):
+    for signal in range(squared_error.shape[-1]): # Plot histograms of squared error values and mean + threshold lines
+        se = squared_error[:,signal]
+        plt.figure(figsize=(12,3))
+        sns.set(font_scale = 1)
+        sns.set_style("white")
+        plt.xlim([0, 2*thresholds[signal]])
+        sns.histplot(np.clip(se, 0, 2 * thresholds[signal]), bins=50, kde=True, color='grey')
+        plt.axvline(x=np.mean(se), color='g', linestyle='--', linewidth=3)
+        plt.text(np.mean(se), 250, "Mean", horizontalalignment='left', 
+                size='small', color='black', weight='semibold')
+        plt.axvline(x=thresholds[signal], color='b', linestyle='--', linewidth=3)
+        plt.text(thresholds[signal], 250, "Threshold", horizontalalignment='left', 
+                size='small', color='Blue', weight='semibold')
+        plt.xlabel('Squared Error')
+        plt.title('Signal '+str(signal+1))
+        sns.despine()
