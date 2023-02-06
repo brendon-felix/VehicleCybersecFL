@@ -383,7 +383,7 @@ def train_model(model, train_ds, val_ds=None, plot=False, evaluate=False):
         plt.legend(['train', 'test'], loc='upper left')
         plt.show()
     if evaluate:
-        print('Evaluating...")
+        print('Evaluating...')
         loss, metric = model.evaluate(test_ds, verbose=0)
         print(f'Test loss: {loss:.5}\nTest {METRIC}: {metric:.5}')        # current best: 8.8552e-05
     return
