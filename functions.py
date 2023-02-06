@@ -343,3 +343,4 @@ def plot_error_thresholds(thresholds, squared_error):
         plt.xlabel('Squared Error')
         plt.title('Signal '+str(signal+1))
         sns.despine()
+    return
