@@ -348,15 +348,6 @@ def get_CIDS_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
 
 def create_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
     model = get_CIDS_model(time_steps, warm_up, input_dim, latent_dim, drop_out)
-    callbacks_list = [
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=PATIENCE,),
-        tf.keras.callbacks.ModelCheckpoint(
-            filepath=FILEPATH,
-            monitor="val_loss",
-            save_best_only=True)]
-
     model.compile(optimizer=tf.optimizers.Adam(learning_rate=LEARNING_RATE),
         loss=LOSS_FUNCTION,
         metrics=[METRIC])
@@ -366,6 +357,15 @@ def create_model(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
 
 
 def train_model(model, train_ds, val_ds=None, plot=False, evaluate=False):
+    callbacks_list = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=PATIENCE,),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=FILEPATH,
+            monitor="val_loss",
+            save_best_only=True)]
+    
     history = model.fit(train_ds,
                     epochs=EPOCHS,
                     validation_data=val_ds,
