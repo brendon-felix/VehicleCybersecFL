@@ -35,7 +35,7 @@ EVAL_SET = 'continuous'
 
 def set_constants():
     MSG_ID = 'id'+str(ID)      # each message contains 1-4 signals that are associated with the specified message ID
-    NUM_SIGNALS = signal_counts[ID-1]
+    NUM_SIGNALS = SIGNAL_COUNTS[ID-1]
     SEQ_STRIDE = TIME_STEPS // 2 # must be <= TIME_STEPS
     LATENT_DIM = 32 * NUM_SIGNALS
     FILEPATH = DIRECTORY+MSG_ID+"_model_"+str(TIME_STEPS)+'-'+str(WARM_UP)+".h5"
