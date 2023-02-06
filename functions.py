@@ -33,15 +33,6 @@ EVAL_SET = 'continuous'
 # PNGFILEPATH = DIRECTORY+MSG_ID+"_model.png"
 
 
-def set_constants():
-    MSG_ID = 'id'+str(ID)      # each message contains 1-4 signals that are associated with the specified message ID
-    NUM_SIGNALS = SIGNAL_COUNTS[ID-1]
-    SEQ_STRIDE = TIME_STEPS // 2 # must be <= TIME_STEPS
-    LATENT_DIM = 32 * NUM_SIGNALS
-    FILEPATH = DIRECTORY+MSG_ID+"_model_"+str(TIME_STEPS)+'-'+str(WARM_UP)+".h5"
-    
-    
-
 def train_csv2df(dir_path): # imports training files into a dataframe
     data_frames = []
     csv_path = dir_path + 'train_1.csv'    # train 1 contains header
