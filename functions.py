@@ -8,27 +8,39 @@ import matplotlib.pyplot as plt
 # !unzip ./SynCAN/\*.zip -d ./SynCAN/. &> /dev/null
 # !rm ./SynCAN/*.zip &> /dev/null
 
+SIGNAL_COUNTS = [2, 3, 2, 1, 2, 2, 2, 1, 1, 4]
+
 ID = 5
 MSG_ID = 'id'+str(ID)      # each message contains 1-4 signals that are associated with the specified message ID
-NUM_SIGNALS = signal_counts[ID-1]
+NUM_SIGNALS = SIGNAL_COUNTS[ID-1]
 TRAIN_SPLIT = 0.8
 VAL_SPLIT = 0.1
 WARM_UP = 20
 TIME_STEPS = 100
-# SEQ_STRIDE = TIME_STEPS // 2 # must be <= TIME_STEPS
-SEQ_STRIDE = TIME_STEPS
+SEQ_STRIDE = TIME_STEPS // 2 # must be <= TIME_STEPS
+# SEQ_STRIDE = TIME_STEPS
 EPOCHS = 3
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
 DROP_OUT = True
 LOSS_FUNCTION = 'mse'
-METRIC = 'binary_crossentropy'
+METRIC = 'mean_squared_logarithmic_error'
 PATIENCE = 1
 LATENT_DIM = 32 * NUM_SIGNALS
 DIRECTORY = "/content/drive/MyDrive/Colab Notebooks/models/cids/"
 FILEPATH = DIRECTORY+MSG_ID+"_model_"+str(TIME_STEPS)+'-'+str(WARM_UP)+".h5"
 EVAL_SET = 'continuous'
 # PNGFILEPATH = DIRECTORY+MSG_ID+"_model.png"
+
+
+def set_constants():
+    MSG_ID = 'id'+str(ID)      # each message contains 1-4 signals that are associated with the specified message ID
+    NUM_SIGNALS = signal_counts[ID-1]
+    SEQ_STRIDE = TIME_STEPS // 2 # must be <= TIME_STEPS
+    LATENT_DIM = 32 * NUM_SIGNALS
+    FILEPATH = DIRECTORY+MSG_ID+"_model_"+str(TIME_STEPS)+'-'+str(WARM_UP)+".h5"
+    
+    
 
 def train_csv2df(dir_path): # imports training files into a dataframe
     data_frames = []
