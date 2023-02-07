@@ -32,8 +32,8 @@ class IntrusionDetector:
 					  eval_set='continuous'
 					  ):
 		self.ID = msg_id_number
-		self.MSG_ID = 'id'+str(ID)	  # each message contains 1-4 signals that are associated with the specified message ID
-		self.NUM_SIGNALS = self.SIGNAL_COUNTS[self.ID-1]
+		self.MSG_ID = 'id'+str(msg_id_number)	  # each message contains 1-4 signals that are associated with the specified message ID
+		self.NUM_SIGNALS = self.SIGNAL_COUNTS[msg_id_number-1]
 		self.TRAIN_SPLIT = train_split
 		self.VAL_SPLIT = val_split
 		self.WARM_UP = warm_up
