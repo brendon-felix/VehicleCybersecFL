@@ -105,7 +105,8 @@ class SynCAN_AnomalyDetector:
 			c = colors[i % (len(colors))]
 			t_data = data[key]
 			ax = t_data.plot(
-				ax = axes[i // 2, i % 2],
+				# ax = axes[i // 2, i % 2],
+				ax = list(axes)[i],
 				color = c,
 				title = msg_id.upper()+'_'+key,
 				rot = 25,
