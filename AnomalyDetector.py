@@ -84,7 +84,7 @@ class SynCAN_AnomalyDetector:
 				id_df = id_df.dropna(axis=1, how='all') # remove unused signal columns
 				dataframes.append(id_df)
 				print(f'{msg_id.upper()}: {len(id_df):,} messages')
-				return dataframes
+			return dataframes
 		else:
 			id_df = df[df.ID==msg_id]
 			id_df = id_df.dropna(axis=1, how='all')
