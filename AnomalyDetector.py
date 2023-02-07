@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 
-class IntrusionDetector:
+class SynCAN_AnomalyDetector:
 	def __init__(self):
 		self.SIGNAL_COUNTS = [2, 3, 2, 1, 2, 2, 2, 1, 1, 4]
 		self.set_constants()
