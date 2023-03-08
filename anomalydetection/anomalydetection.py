@@ -218,10 +218,10 @@ def find_ranges(predictions, index): # used for highlighting in plots
 
 
 class CentralizedModel:
-    def __init__(self, dataframe, params, save_path='model.h5', verbose=False):
+    def __init__(self, dataframe, params, file_name='model.h5', verbose=False):
         self.datasets, self.dataframes = get_train_val_test(dataframe, params, verbose=verbose)
         self.params = params
-        self.save_path = save_path
+        self.save_path = params['model_dir']+file_name
         self.verbose = verbose
         self.initialize_model()
         return
