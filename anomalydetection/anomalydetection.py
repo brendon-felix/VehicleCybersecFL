@@ -228,6 +228,7 @@ class CentralizedModel:
 
     def initialize_model(self):
         if self.verbose:
+            print(f"Saving model to {self.params['model_dir']}")
             print('Initializing centralized model...\n')
         self.model = create_model(self.params)
         compile_model(self.model, self.params)
@@ -326,6 +327,7 @@ class FederatedLearning:
             data_split = [1/num_clients for _ in range(num_clients)]
         self.clients = []
         if self.verbose:
+            print(f"Saving models to {self.params['model_dir']}")
             print('Initializing clients', end=' ')
             if load_models:
                 print(f'using existing models...\n')
