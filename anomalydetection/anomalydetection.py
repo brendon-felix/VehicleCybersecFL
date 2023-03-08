@@ -57,7 +57,7 @@ def visualize_data(df, start_time=0, end_time=None):
 def sequences_from_indices(data, indices_ds, start_index, end_index):
     dataset = tf.data.Dataset.from_tensors(data[start_index : end_index])
     dataset = tf.data.Dataset.zip((dataset.repeat(), indices_ds)).map(
-        lambda steps, inds: tf.gather(steps, inds),  # pylint: disable=unnecessary-lambda
+        tf.autograph.experimental.do_not_convert(lambda steps, inds: tf.gather(steps, inds)),  # pylint: disable=unnecessary-lambda
         num_parallel_calls=tf.data.AUTOTUNE)
     return dataset
 
@@ -81,14 +81,14 @@ def timeseries_dataset(data, targets,
     # For each initial window position, generates indices of the window elements
     indices = tf.data.Dataset.zip(
         (tf.data.Dataset.range(len(start_positions)), positions_ds)).map(
-            lambda i, positions: tf.range(positions[i], positions[i] + (sequence_length + warm_up)),
+            tf.autograph.experimental.do_not_convert(lambda i, positions: tf.range(positions[i], positions[i] + (sequence_length + warm_up))),
             num_parallel_calls=tf.data.AUTOTUNE)
 
     dataset = sequences_from_indices(data, indices, start_index, end_index)
     if targets is not None:
         indices = tf.data.Dataset.zip(
             (tf.data.Dataset.range(len(start_positions)), positions_ds)).map(
-                lambda i, positions: positions[i],
+                tf.autograph.experimental.do_not_convert(lambda i, positions: positions[i]),
                 num_parallel_calls=tf.data.AUTOTUNE)
         target_ds = sequences_from_indices(
             targets, indices, start_index, end_index)
@@ -101,7 +101,7 @@ def timeseries_dataset(data, targets,
                 start_positions = np.arange(warm_up, stop_idx + warm_up, sequence_stride, dtype=index_dtype)
                 positions_ds = tf.data.Dataset.from_tensors(start_positions).repeat()
                 indices = tf.data.Dataset.zip((tf.data.Dataset.range(len(start_positions)), positions_ds)).map(
-                    lambda i, positions: tf.range(positions[i], positions[i] + sequence_length),
+                    tf.autograph.experimental.do_not_convert(lambda i, positions: tf.range(positions[i], positions[i] + sequence_length)),
                     num_parallel_calls=tf.data.AUTOTUNE)
                 target_ds = sequences_from_indices(data, indices, start_index, end_index)
                 dataset = tf.data.Dataset.zip((dataset, target_ds))
