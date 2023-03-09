@@ -4,6 +4,11 @@ import tensorflow as tf
 from keras import layers
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os.path
+import time
+
+#DEFINE FUNCTIONS
+#_______________________________________________________________________________________________________________________
 
 def import_train_data(csv_path, msg_id, start_time=0, end_time=None):    # imports unlabeled training data into dataframe
     df = pd.read_csv(csv_path)
@@ -216,6 +221,8 @@ def find_ranges(predictions, index): # used for highlighting in plots
     return ranges
 
 
+#DEFINE CLASSES
+#_______________________________________________________________________________________________________________________
 
 class CentralizedModel:
     def __init__(self, dataframe, params, file_name='model.h5', verbose=False):
@@ -266,57 +273,169 @@ class CentralizedModel:
             print(f"\nTest loss: {loss:.5}\nTest {self.params['metric']}: {metric:.5}")
         return
 
-
+#_______________________________________________________________________________________________________________________
 
 class FederatedClient:
-    def __init__(self, dataframe, params, model=None, save_path='client_model.h5', verbose=False):
+    client_id = 0
+    def __init__(self, dataframe, params, client_id=None, verbose=False, tensorboard=False):
         self.dataset, self.dataframe = create_dataset(dataframe, params, verbose=verbose)
         self.params = params
-        self.save_path = save_path
-        self.verbose = verbose
-        if model:
-            self.set_model(model)
+        if client_id:
+            self.client_id = client_id
         else:
-            self.initialize_model()
+            self.client_id = FederatedClient.client_id
+            FederatedClient.client_id += 1
+        self.verbose = verbose
+        self.tensorboard = tensorboard
+        self.iteration = 1
         return
-
+    
     def initialize_model(self):
         self.model = create_model(self.params)
+        self.load_global_model()
         compile_model(self.model, self.params)
         return
     
-    def set_model(self, model):
-        self.model = model
+    def load_global_model(self):
+        file_path = self.params['model_dir']+'global_model_'+str(self.iteration-1)+'.h5'
+        while not os.path.exists(file_path):
+            if self.verbose:
+                print(f'\rWaiting for global model {self.iteration-1}: Retrying in 10 seconds...', end='')
+            time.sleep(10)
+        global_model = tf.keras.models.load_model(file_path)
+        self.model.set_weights(global_model.get_weights())
         return
     
-    def train_model(self, epochs=1):
+    def train_model(self):
+        if self.verbose:
+            print('Training model...')
         callbacks_list = [
-            tf.keras.callbacks.ModelCheckpoint(
-            filepath=self.save_path)]
+            tf.keras.callbacks.EarlyStopping(monitor='loss', patience=self.params['patience']),
+            ]
+        if self.tensorboard:
+            logdir = self.params['model_dir']+"logs/client"+str(self.client_id)+'_'+str(self.iteration)
+            tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
+            callbacks_list.append(tensorboard_callback)
         verbose = 'auto' if self.verbose else 0
         self.model.fit(self.dataset,
-            epochs=epochs,
+            epochs=self.params['epochs_per_round'],
             use_multiprocessing=True,
             workers=6,
             shuffle=True,
             callbacks=callbacks_list,
             verbose=verbose)
         return
+    
+    def iterate(self):
+        self.train_model()
+        save_path = self.params['model_dir']+'client'+str(self.client_id)+'_model_'+str(self.iteration)+'.h5'
+        tf.keras.models.save_model(self.model, save_path)
+        self.iteration += 1
 
-
-
-
-class FederatedLearning:
-    def __init__(self, dataframe, params, verbose=False):
-        self.params = params
-        self.ds_dict, self.df_dict = get_train_val_test(dataframe, params, verbose=verbose)
-        self.global_model = create_model(params)
-        compile_model(self.global_model, params)
-        self.verbose = verbose
-        self.val_loss = float('inf')
+    def run_client(self):
+        if self.verbose:
+            print(f'Starting Client {self.client_id}...')
+        self.initialize_model()
+        num_iterations = self.params['num_iterations']
+        for i in range(num_iterations):
+            print(f'\rIteration {self.iteration}/{num_iterations}', end='')
+            if self.verbose:
+                print()
+            self.iterate()
+            if self.verbose:
+                print(f'Loading global model {self.iteration-1}...')
+            self.load_global_model()
         return
 
-    def initialize_clients(self, load_models=False, data_split=None):
+#_______________________________________________________________________________________________________________________
+
+class FederatedAggregator:
+    #   This class is used to perform aggregation on saved clients models which may be training on a separate runtime
+    def __init__(self, params, verbose=False):
+        self.params = params
+        self.verbose = verbose
+        if verbose:
+            print(f"Using model directory {self.params['model_dir']}")
+        self.iteration = 1
+        return
+    
+    def initialize_model(self):
+        if self.verbose:
+            print('Initializing global model...')
+        self.global_model = create_model(params)
+        compile_model(self.global_model, self.params)
+        save_path = self.params['model_dir']+'global_model_0.h5'
+        tf.keras.models.save_model(self.global_model, save_path)
+        return
+    
+    def load_client_models(self):
+        num_clients = self.params['num_clients']
+        self.client_models = []
+        if self.verbose:
+                print(f'Loading client models...')
+        for i in range(num_clients):
+            file_path = self.params['model_dir']+'client'+str(i)+'_model_'+str(self.iteration)+'.h5'
+            while not os.path.exists(file_path):
+                if self.verbose:
+                    print(f'\rWaiting for client {i}: Retrying in 10 seconds...', end='')
+                time.sleep(10)
+            client_model = tf.keras.models.load_model(file_path)
+            self.client_models.append(client_model)
+        return
+    
+    def aggregate_client_models(self):
+        if self.verbose:
+            print('Aggregating client models...')
+        global_weights = self.global_model.get_weights()    # used only for reshaping the client weights
+        num_layers = len(global_weights)
+        clients_weights = []
+        for client_model in self.client_models:
+            weights = client_model.get_weights()
+            clients_weights.append(weights)
+        new_weights = []
+        for i in range(num_layers):
+            average = np.mean([w[i] for w in clients_weights], axis=0)
+            new_weights.append(average.reshape(global_weights[i].shape))
+        self.global_model.set_weights(new_weights)
+        return
+    
+    def iterate(self):
+        self.load_client_models()
+        self.aggregate_client_models()
+        save_path = self.params['model_dir']+'global_model_'+str(self.iteration)+'.h5'
+        tf.keras.models.save_model(self.global_model, save_path)
+        self.iteration += 1
+        return
+
+    def run_aggregation(self):
+        if self.verbose:
+            print(f'Starting Aggregator...')
+        num_iterations = self.params['num_iterations']
+        for i in range(num_iterations):
+            self.iteration = i+1
+            print(f'\rIteration {self.iteration}/{num_iterations}', end='')
+            if self.verbose:
+                print()
+            self.iterate()
+        print()
+
+#_______________________________________________________________________________________________________________________
+
+class FederatedLearning:
+    #   This class is used to perform a FL simulation on one runtime whichs trains and aggregates multiple clients
+    def __init__(self, dataframe, params, data_split=None, verbose=False, tensorboard=False):
+        self.ds_dict, self.df_dict = get_train_val_test(dataframe, params, verbose=verbose)
+        self.params = params
+        self.verbose = verbose
+        self.val_loss = float('inf')
+        self.iteration = 0
+        self.tensorboard = tensorboard
+        self.aggregator = FederatedAggregator(params, verbose=verbose)
+        self.aggregator.initialize_model()
+        self.initialize_clients(data_split=data_split)
+        return
+
+    def initialize_clients(self, data_split=None):
         train_df = self.df_dict['train']
         num_clients = self.params['num_clients']
         if data_split:
@@ -327,91 +446,59 @@ class FederatedLearning:
             data_split = [1/num_clients for _ in range(num_clients)]
         self.clients = []
         if self.verbose:
-            print(f"Saving models to {self.params['model_dir']}")
-            print('Initializing clients', end=' ')
-            if load_models:
-                print(f'using existing models...\n')
-            else:
-                print(f'and generating models...\n')
+            print('Initializing clients and generating models...')
         start = 0
         for i in range(num_clients):
             num_samples = int(len(train_df) * data_split[i])
             end = start + num_samples
             df = train_df.iloc[start:end]
-            save_path = self.params['model_dir']+'client'+str(i+1)+'_model.h5'
-            if load_models:
-                client_model = tf.keras.models.load_model(save_path)
-            else:
-                client_model = tf.keras.models.clone_model(self.global_model)
-                client_model.set_weights(self.global_model.get_weights())
-            compile_model(client_model, self.params)
             if self.verbose:
-                print(f'Client {i+1} dataset:')
-            new_client = FederatedClient(df, self.params, client_model,
-                                         save_path=save_path, verbose=self.verbose)
+                print(f'Client {i}:')
+            new_client = FederatedClient(
+                df,
+                self.params,
+                client_id=i,
+                verbose=self.verbose,
+                tensorboard=self.tensorboard)
+            new_client.initialize_model()
             self.clients.append(new_client)
             if self.verbose:
                 print()
             start = end
         return
     
-    def train_client_models(self, epochs=1):
-        num_clients = len(self.clients)
-        for i, client in enumerate(self.clients, 1):
-            if self.verbose:
-                print(f'Training model for client {i}/{num_clients}')
-            client.train_model(epochs)
-        return
-    
-    def aggregate_client_models(self, save_global_model=False):
-        global_weights = self.global_model.get_weights()
-        num_layers = len(global_weights)
-        clients_weights = []
-        for client in self.clients:
-            weights = client.model.get_weights()
-            clients_weights.append(weights)
-        new_weights = []
-        for i in range(num_layers):
-            average = np.mean([w[i] for w in clients_weights], axis=0)
-            new_weights.append(average.reshape(global_weights[i].shape))
-        self.global_model.set_weights(new_weights)
-        return
-    
-    def distribute_global_model(self):
-        weights = self.global_model.get_weights()
-        for client in self.clients:
-            client.model.set_weights(weights)
-        return
-    
     def validate_global_model(self):
         if self.verbose:
             print('Validating global model...')
         verbose = 'auto' if self.verbose else 0
-        loss, metric = self.global_model.evaluate(self.ds_dict['val'], verbose=verbose)
+        loss, metric = self.aggregator.global_model.evaluate(self.ds_dict['val'], verbose=verbose)
         if self.verbose:
             print(f"Validation loss: {loss:.5}\nValidation {self.params['metric']}: {metric:.5}")
         self.val_loss = loss
 
     def iterate(self, validate=True):
-        self.train_client_models()
-        self.aggregate_client_models()
+        for j, client in enumerate(self.clients):
+            if self.verbose:
+                print(f'Client {j}:')
+            client.iterate()
+        self.aggregator.iterate()
         if validate:
             old_val_loss = self.val_loss
             self.validate_global_model()
             if old_val_loss < self.val_loss:
                 return
-        save_path = self.params['model_dir']+'global_model.h5'
-        tf.keras.models.save_model(self.global_model, save_path)
-        self.distribute_global_model()
+        for client in self.clients:
+            client.load_global_model()
         return
 
     def test_global_model(self):
         print('Testing global model...')
         verbose = 'auto' if self.verbose else 0
-        loss, metric = self.global_model.evaluate(self.ds_dict['test'], verbose=verbose)
+        loss, metric = self.aggregator.global_model.evaluate(self.ds_dict['test'], verbose=verbose)
         print(f"Test loss: {loss:.5}\nTest {self.params['metric']}: {metric:.5}")
 
-    def run_federated_learning(self, num_iterations, validation=False, test=False):
+    def run_federated_learning(self, validation=False, test=False):
+        num_iterations = self.params['num_iterations']
         for i in range(num_iterations):
             print(f'\rIteration {i+1}/{num_iterations}', end='')
             if self.verbose:
@@ -423,7 +510,7 @@ class FederatedLearning:
         if test:
             self.test_global_model()
 
-
+#_______________________________________________________________________________________________________________________
 
 class SynCAN_Evaluator:
     def __init__(self, thresh_df, params, verbose=False):
@@ -469,7 +556,7 @@ class SynCAN_Evaluator:
     
     def plot_error_thresholds(self, squared_error):
         num_signals = params['num_signals']
-        fig, axes = plt.subplots(nrows=num_signals, ncols=1, figsize=(13, 1*num_signals))
+        fig, axes = plt.subplots(nrows=num_signals, ncols=1, figsize=(13, 2*num_signals))
         for i in range(num_signals): # Plot histograms of squared error values and mean + threshold lines
             ax = list(axes)[i]
             se = squared_error[:,i]
@@ -556,7 +643,7 @@ class SynCAN_Evaluator:
                 ax2.set_ylim([0,self.thresholds[i]*1.5])
                 ax2.axhline(self.thresholds[i], linestyle='--', c='red', alpha=0.5)
                 ax2.set_ylabel('Squared Error')
-                ax2.legend(['Squared Error'], loc='upper left')
+                ax2.legend(['Squared Error'], loc='lower left')
         plt.tight_layout()
         plt.show()
         return
