@@ -362,7 +362,7 @@ class FederatedAggregator:
     def initialize_model(self):
         if self.verbose:
             print('Initializing global model...')
-        self.global_model = create_model(params)
+        self.global_model = create_model(self.params)
         compile_model(self.global_model, self.params)
         save_path = self.params['model_dir']+'global_model_0.h5'
         tf.keras.models.save_model(self.global_model, save_path)
