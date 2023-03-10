@@ -10,19 +10,7 @@ import time
 #DEFINE FUNCTIONS
 #_______________________________________________________________________________________________________________________
 
-def import_train_data(csv_path, msg_id, start_time=0, end_time=None):    # imports unlabeled training data into dataframe
-    df = pd.read_csv(csv_path)
-    df = df.set_index(df.Time)
-    df.index = df.index - df.index.min()      # set starting time to 0
-    end_time = df.index.max() if not end_time else end_time
-    df = df[((df.index >= start_time) & (df.index < end_time))]
-    print(f'{len(df):,} total messages (id1,id2,...,id10)')
-    id_df = df[df.ID==msg_id]
-    id_df = id_df.dropna(axis=1, how='all')
-    print(f'{len(id_df):,} messages used ({msg_id})')
-    return id_df.iloc[:,3:]
-
-def import_eval_data(csv_path, msg_id, start_time=0, end_time=None):  # imports evaluation (abnormal) data into dataframe
+def import_data(csv_path, msg_id, start_time=0, end_time=None):  # imports SynCAN csv into dataframe
     df = pd.read_csv(csv_path, header=None, skiprows=1, names=['Label',  'Time', 'ID',
                                                                'Signal1',  'Signal2',  'Signal3',  'Signal4'])
     df = pd.DataFrame(df.set_index(df.Time))
@@ -39,10 +27,31 @@ def import_eval_data(csv_path, msg_id, start_time=0, end_time=None):  # imports 
     print(f'{num_anomalous:,} anomalous messages out of {len(id_df):,}\n')
     return id_df_labels.join(id_df)
 
+def find_ranges(predictions, index): # used for highlighting in plots
+    # accepts a dataframe of 1s and 0s
+    # returns a list of range tuples which contain a start and end index
+    ranges = []
+    i = 0
+    while i < len(predictions):
+        if predictions[i]:
+            start = index[i]
+            while True:
+                i += 1
+                if i >= len(predictions):
+                    break
+                if not predictions[i]:
+                    break
+            end = index[i]
+            # if end - start > 100:
+            ranges.append((start, end))
+        i += 1
+    return ranges
+
 def visualize_data(df, start_time=0, end_time=None):
-    num_signals = df.shape[1]
+    num_signals = df.shape[1]-1
     end_time = df.index.max() if not end_time else end_time
     data = df[((df.index >= start_time) & (df.index < end_time))]
+    anomaly_ranges = find_ranges(data['Label'].to_numpy(), data.index)
     colors = ['blue', 'orange', 'green', 'red']
     fig, axes = plt.subplots(nrows=num_signals, ncols=1, figsize=(13, 2*num_signals), sharex=True)
     for i in range(num_signals):
@@ -55,6 +64,8 @@ def visualize_data(df, start_time=0, end_time=None):
             color = c,
             rot = 25)
         ax.legend([f'Signal {i}'], loc='upper left')
+        for start, end in anomaly_ranges:
+            ax.axvspan(start, end, color='grey', alpha=0.3)
     plt.tight_layout()
     plt.show()
     return
@@ -200,25 +211,7 @@ def compile_model(model, params):
         metrics=[params['metric']])
     return
 
-def find_ranges(predictions, index): # used for highlighting in plots
-    # accepts a dataframe of 1s and 0s
-    # returns a list of range tuples which contain a start and end index
-    ranges = []
-    i = 0
-    while i < len(predictions):
-        if predictions[i]:
-            start = index[i]
-            while True:
-                i += 1
-                if i >= len(predictions):
-                    break
-                if not predictions[i]:
-                    break
-            end = index[i]
-            # if end - start > 100:
-            ranges.append((start, end))
-        i += 1
-    return ranges
+
 
 
 #DEFINE CLASSES
@@ -517,7 +510,6 @@ class SynCAN_Evaluator:
         if verbose:
             print('Creating threshold dataset...')
         self.thresh_ds, self.thresh_df = create_dataset(thresh_df, params, verbose=verbose)
-        self.thresh_df.drop(['Label'], axis=1, errors='ignore')    # remove labels if they exist
         self.params = params
         self.verbose = verbose
         return
@@ -539,7 +531,7 @@ class SynCAN_Evaluator:
 
     def set_thresholds(self, num_stds, plot=False): # used for detecting reconstructions that are significantly different from the orignal
         # returns a numpy array containing a threshold for each signal
-        real_values = self.thresh_df.to_numpy()
+        real_values = self.thresh_df.to_numpy()[:,1:]
         if self.verbose:
             print('Reconstructing threshold-selection data...')
         reconstruction = self.reconstruct(self.thresh_ds)
@@ -587,14 +579,14 @@ class SynCAN_Evaluator:
         self.predictions = np.max(1*(self.eval_se > self.thresholds), axis=1)
         return
 
-    def evaluate(self, model, eval_data, thresh_stds=2, plot_thresholds=False):
+    def evaluate(self, model, eval_df, thresh_stds=2, plot_thresholds=False):
         self.model = model
         self.set_thresholds(thresh_stds, plot_thresholds)
-        self.evaluation_df = eval_data['df']
-        labels = eval_data['df']['Label']
+        evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
+        labels = self.evaluation_df['Label']
         if self.verbose:
             print(f'Reconstructing evaluation data...')
-        self.reconstructed_df = self.reconstruct(eval_data['ds'])
+        self.reconstructed_df = self.reconstruct(evaluation_ds)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
         if self.verbose:
             print('Predicting anomalies using thresholds...')
@@ -614,8 +606,9 @@ class SynCAN_Evaluator:
 
         num_signals = reconstructed_data.shape[1]
         labels = data.Label
+        real_ranges = find_ranges(labels.to_numpy(), data.index)
+        pred_ranges = find_ranges(self.predictions, in_df.index)
         msg_id = self.params['msg_id']
-
         fig, axes = plt.subplots(nrows=num_signals, ncols=1, figsize=(13, 3*num_signals), sharex=True)
         for i in range(num_signals):
             key = 'Signal'+str(i+1)
@@ -625,13 +618,10 @@ class SynCAN_Evaluator:
             ax0 = t_data.plot(ax=ax, color="black", title=msg_id.upper()+'_'+key, rot=25)
             ax1 = t_reconstructed_data.plot(ax=ax, color="red", rot=10)
             ax1.legend(['Original Signal', 'Reconstructed Signal'], loc='upper left')
-
             if highlight_anomalies:
-                real_ranges = find_ranges(labels.to_numpy(), data.index)
                 for start, end in real_ranges:
                     ax0.axvspan(start, end, color='grey', alpha=0.3)
             if highlight_predictions:
-                pred_ranges = find_ranges(self.predictions, in_df.index)
                 for start, end in pred_ranges:
                     if start > data.index.min() and end < data.index.max():
                         ax1.axvspan(start, end, color='red', alpha=0.3)
