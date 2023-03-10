@@ -41,7 +41,7 @@ def find_ranges(predictions, index): # used for highlighting in plots
                     break
                 if not predictions[i]:
                     break
-            end = index[i]
+            end = index[i-1]
             # if end - start > 100:
             ranges.append((start, end))
         i += 1
@@ -623,8 +623,11 @@ class SynCAN_Evaluator:
                     ax0.axvspan(start, end, color='grey', alpha=0.3)
             if highlight_predictions:
                 for start, end in pred_ranges:
-                    if start > data.index.min() and end < data.index.max():
-                        ax1.axvspan(start, end, color='red', alpha=0.3)
+                    if start < data.index.min():
+                        start = data.index.min()
+                    if end > data.index.max():
+                        end = data.index.max()
+                    ax1.axvspan(start, end, color='red', alpha=0.3)
             if plot_squared_error: # plot squared error
                 ax2 = ax0.twinx()
                 se = pd.DataFrame(self.eval_se[:,i], index=in_df.index)
