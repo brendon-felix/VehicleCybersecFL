@@ -10,7 +10,7 @@ import time
 #DEFINE FUNCTIONS
 #_______________________________________________________________________________________________________________________
 
-def import_data(csv_path, msg_id, start_time=0, end_time=None):  # imports SynCAN csv into dataframe
+def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports SynCAN csv into dataframe
     df = pd.read_csv(csv_path, header=None, skiprows=1, names=['Label',  'Time', 'ID',
                                                                'Signal1',  'Signal2',  'Signal3',  'Signal4'])
     df = pd.DataFrame(df.set_index(df.Time))
@@ -18,14 +18,15 @@ def import_data(csv_path, msg_id, start_time=0, end_time=None):  # imports SynCA
     end_time = df.index.max() if not end_time else end_time
     df = df[((df.index >= start_time) & (df.index < end_time))]
     print(f'{len(df):,} total messages (id1,id2,...,id10)')
-    id_df = df[df.ID==msg_id]
-    id_df = id_df.dropna(axis=1, how='all')
-    print(f'{len(id_df):,} messages used ({msg_id})')
-    id_df_labels = id_df.iloc[:,0:1].astype(int)
-    id_df = id_df.iloc[:,3:]
-    num_anomalous = len(id_df_labels[id_df_labels['Label']==1])
-    print(f'{num_anomalous:,} anomalous messages out of {len(id_df):,}\n')
-    return id_df_labels.join(id_df)
+    if msg_id:
+        df = df[df.ID==msg_id]
+        df = df.dropna(axis=1, how='all')
+        print(f'{len(df):,} messages used ({msg_id})')
+    df_labels = id_df.iloc[:,0:1].astype(int)
+    df = df.iloc[:,3:]
+    num_anomalous = len(df_labels[df_labels['Label']==1])
+    print(f'{num_anomalous:,} anomalous messages out of {len(df):,}\n')
+    return df_labels.join(df)
 
 def find_ranges(predictions, index): # used for highlighting in plots
     # accepts a dataframe of 1s and 0s
