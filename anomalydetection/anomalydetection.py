@@ -420,7 +420,7 @@ class FederatedLearning:
         self.ds_dict, self.df_dict = get_train_val_test(dataframe, params, verbose=verbose)
         self.params = params
         self.verbose = verbose
-        self.val_loss = float('inf')
+        self.val_loss_list = []
         self.iteration = 0
         self.tensorboard = tensorboard
         self.aggregator = FederatedAggregator(params, verbose=verbose)
@@ -461,31 +461,37 @@ class FederatedLearning:
         return
     
     def validate_global_model(self):
-        if self.verbose:
-            print('Validating global model...')
         verbose = 'auto' if self.verbose else 0
         loss, metric = self.aggregator.global_model.evaluate(self.ds_dict['val'], verbose=verbose)
         if self.verbose:
             print(f"Validation loss: {loss:.5}\nValidation {self.params['metric']}: {metric:.5}")
-        self.val_loss = loss
+        self.val_loss_list.append(loss)
 
     def iterate(self, validate=True):
         for j, client in enumerate(self.clients):
+            print(f"\rIteration {self.iteration+1}/{self.params['num_iterations']} - Client {j+1}/{len(self.clients)}", end='')
             if self.verbose:
-                print(f'Client {j}:')
+                print()
             client.iterate()
         self.aggregator.iterate()
         if validate:
-            old_val_loss = self.val_loss
+            print('\rValidating global model...', end='')
+            if self.verbose:
+                print()
+            if len(self.val_loss_list) == 0:
+                old_val_loss = float('inf')
+            else:
+                old_val_loss = self.val_loss_list[-1]
             self.validate_global_model()
-            if old_val_loss < self.val_loss:
+            if old_val_loss < self.val_loss_list[-1]:
                 return
         for client in self.clients:
             client.load_global_model()
+        self.iteration += 1
         return
 
     def test_global_model(self):
-        print('Testing global model...')
+        print('\rTesting global model...')
         verbose = 'auto' if self.verbose else 0
         loss, metric = self.aggregator.global_model.evaluate(self.ds_dict['test'], verbose=verbose)
         print(f"Test loss: {loss:.5}\nTest {self.params['metric']}: {metric:.5}")
@@ -493,13 +499,9 @@ class FederatedLearning:
     def run_federated_learning(self, validation=False, test=False):
         num_iterations = self.params['num_iterations']
         for i in range(num_iterations):
-            print(f'\rIteration {i+1}/{num_iterations}', end='')
-            if self.verbose:
-                print()
             self.iterate(validate=validation)
             if self.verbose:
                 print()
-        print()
         if test:
             self.test_global_model()
 
@@ -623,11 +625,12 @@ class SynCAN_Evaluator:
                     ax0.axvspan(start, end, color='grey', alpha=0.3)
             if highlight_predictions:
                 for start, end in pred_ranges:
-                    if start < data.index.min():
-                        start = data.index.min()
-                    if end > data.index.max():
-                        end = data.index.max()
-                    ax1.axvspan(start, end, color='red', alpha=0.3)
+                    if end > data.index.min() and start < data.index.max():
+                        if start < data.index.min():
+                            start = data.index.min()
+                        if end > data.index.max():
+                            end = data.index.max()
+                        ax1.axvspan(start, end, color='red', alpha=0.3)
             if plot_squared_error: # plot squared error
                 ax2 = ax0.twinx()
                 se = pd.DataFrame(self.eval_se[:,i], index=in_df.index)
