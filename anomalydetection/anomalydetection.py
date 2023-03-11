@@ -22,7 +22,7 @@ def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports 
         df = df[df.ID==msg_id]
         df = df.dropna(axis=1, how='all')
         print(f'{len(df):,} messages used ({msg_id})')
-    df_labels = id_df.iloc[:,0:1].astype(int)
+    df_labels = df.iloc[:,0:1].astype(int)
     df = df.iloc[:,3:]
     num_anomalous = len(df_labels[df_labels['Label']==1])
     print(f'{num_anomalous:,} anomalous messages out of {len(df):,}\n')
