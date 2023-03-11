@@ -18,15 +18,17 @@ def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports 
     end_time = df.index.max() if not end_time else end_time
     df = df[((df.index >= start_time) & (df.index < end_time))]
     print(f'{len(df):,} total messages (id1,id2,...,id10)')
+    df_labels = df.iloc[:,0:1].astype(int)
     if msg_id:
         df = df[df.ID==msg_id]
+        df_labels = df.iloc[:,0:1].astype(int)
         df = df.dropna(axis=1, how='all')
         print(f'{len(df):,} messages used ({msg_id})')
-    df_labels = df.iloc[:,0:1].astype(int)
-    df = df.iloc[:,3:]
-    num_anomalous = len(df_labels[df_labels['Label']==1])
+        df = df.iloc[:,3:]
+        df = df_labels.join(df)
+    num_anomalous = len(df[df['Label']==1])
     print(f'{num_anomalous:,} anomalous messages out of {len(df):,}\n')
-    return df_labels.join(df)
+    return df
 
 def find_ranges(predictions, index): # used for highlighting in plots
     # accepts a dataframe of 1s and 0s
