@@ -647,3 +647,4 @@ class SynCAN_Evaluator:
         plt.show()
         return
 
+    
