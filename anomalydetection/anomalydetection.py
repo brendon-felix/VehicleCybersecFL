@@ -30,6 +30,13 @@ def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports 
     print(f'{num_anomalous:,} anomalous messages out of {len(df):,}\n')
     return df
 
+def clean_labels(df, msg_id, real_ranges):
+    clean_df = df.copy()
+    clean_df.Label = 0
+    for start_time, end_time in real_ranges:
+        clean_df.loc[start_time:end_time, 'Label'] = 1
+    return clean_df
+
 def find_ranges(predictions, index): # used for highlighting in plots
     # accepts a dataframe of 1s and 0s
     # returns a list of range tuples which contain a start and end index
@@ -584,6 +591,24 @@ class SynCAN_Evaluator:
         self.predictions = np.max(1*(self.eval_se > self.thresholds), axis=1)
         return
 
+    def get_accuracy(self, labels):
+        labels = self.evaluation_df['Label']
+        real_ranges = find_ranges(labels.to_numpy(), labels.index)
+        pred_ranges = find_ranges(self.predictions, labels.index)
+        num_correct = 0
+        for pred_start, pred_end in pred_ranges:
+            if pred_end - pred_start > 100:
+                correct = False
+                for real_start, real_end in real_ranges:
+                    if pred_start < real_end and pred_end > real_start:
+                        correct = True
+                if correct:
+                    num_correct += 1
+        if self.verbose:
+            print(f'Number of predicted anomalies: {len(pred_ranges)}')
+            print(f'Number of correct predictions: {num_correct}')
+        return num_correct / len(pred_ranges)
+
     def evaluate(self, model, eval_df, thresh_stds=2, plot_thresholds=False):
         self.model = model
         self.set_thresholds(thresh_stds, plot_thresholds)
@@ -596,7 +621,7 @@ class SynCAN_Evaluator:
         if self.verbose:
             print('Predicting anomalies using thresholds...')
         self.set_predictions()
-        print(f'\nAccuracy: {np.mean(self.predictions==labels):.5}\n\n')
+        print(f'\nAccuracy: {self.get_accuracy(labels):.5}\n\n')
         return
 
     def visualize_reconstruction(self, start_time=0, end_time=None, highlight_anomalies=False, highlight_predictions=False, plot_squared_error=False):
@@ -646,5 +671,3 @@ class SynCAN_Evaluator:
         plt.tight_layout()
         plt.show()
         return
-
-    
