@@ -283,7 +283,7 @@ class FederatedClient:
     def __init__(self, dataframe, params, client_id=None, verbose=False, tensorboard=False):
         self.dataset, self.dataframe = create_dataset(dataframe, params, verbose=verbose)
         self.params = params
-        if client_id:
+        if client_id is not None:
             self.client_id = client_id
         else:
             self.client_id = FederatedClient.client_id
