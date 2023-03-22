@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import os.path
 import time
-#Test
+
 #DEFINE FUNCTIONS
 #_______________________________________________________________________________________________________________________
 
@@ -283,7 +283,7 @@ class FederatedClient:
     def __init__(self, dataframe, params, client_id=None, verbose=False, tensorboard=False):
         self.dataset, self.dataframe = create_dataset(dataframe, params, verbose=verbose)
         self.params = params
-        if client_id is not None:
+        if client_id:
             self.client_id = client_id
         else:
             self.client_id = FederatedClient.client_id
@@ -430,7 +430,7 @@ class FederatedLearning:
         self.ds_dict, self.df_dict = get_train_val_test(dataframe, params, verbose=verbose)
         self.params = params
         self.verbose = verbose
-        self.val_loss_list = []
+        self.val_loss_list = [float('inf')]
         self.iteration = 0
         self.tensorboard = tensorboard
         self.aggregator = FederatedAggregator(params, verbose=verbose)
@@ -488,13 +488,11 @@ class FederatedLearning:
             print('\rValidating global model...', end='')
             if self.verbose:
                 print()
-            if len(self.val_loss_list) == 0:
-                old_val_loss = float('inf')
-            else:
-                old_val_loss = self.val_loss_list[-1]
+            val_loss_list = [v for v in self.val_loss_list]
             self.validate_global_model()
-            if old_val_loss < self.val_loss_list[-1]:
-                return True
+            for loss in val_loss_list:
+                if loss < self.val_loss_list[-1]:
+                    return True
         for client in self.clients:
             client.load_global_model()
         self.iteration += 1
@@ -672,3 +670,5 @@ class SynCAN_Evaluator:
         plt.tight_layout()
         plt.show()
         return
+
+    
