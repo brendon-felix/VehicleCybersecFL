@@ -494,11 +494,11 @@ class FederatedLearning:
                 old_val_loss = self.val_loss_list[-1]
             self.validate_global_model()
             if old_val_loss < self.val_loss_list[-1]:
-                return
+                return True
         for client in self.clients:
             client.load_global_model()
         self.iteration += 1
-        return
+        return False
 
     def test_global_model(self):
         print('\rTesting global model...')
@@ -509,7 +509,8 @@ class FederatedLearning:
     def run_federated_learning(self, validation=False, test=False):
         num_iterations = self.params['num_iterations']
         for i in range(num_iterations):
-            self.iterate(validate=validation)
+            if self.iterate(validate=validation):
+                break
             if self.verbose:
                 print()
         if test:
