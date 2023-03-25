@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from keras import layers
+from sklearn import metrics
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os.path
@@ -540,6 +541,23 @@ class SynCAN_Evaluator:
         columns = ['Signal'+str(i+1) for i in range(reconstruction.shape[-1])]
         return pd.DataFrame(reconstruction, columns=columns)
 
+    # def set_thresholds(self, num_stds, plot=False): # used for detecting reconstructions that are significantly different from the orignal
+    #     # returns a numpy array containing a threshold for each signal
+    #     real_values = self.thresh_df.to_numpy()[:,1:]
+    #     if self.verbose:
+    #         print('Reconstructing threshold-selection data...')
+    #     reconstruction = self.reconstruct(self.thresh_ds)
+    #     reconstructed_values = reconstruction.to_numpy()
+    #     thresh_se = np.square(real_values - reconstructed_values)
+    #     self.thresholds = thresh_se.mean(axis=0) + (num_stds * thresh_se.std(axis=0))
+    #     if self.verbose:
+    #         print('Setting squared-error thresholds...')
+    #         for i, t in enumerate(self.thresholds):
+    #             print(f'Signal {str(i+1)}: {t:.5}')
+    #     if plot:
+    #         self.plot_error_thresholds(thresh_se)
+    #     return
+    
     def set_thresholds(self, num_stds, plot=False): # used for detecting reconstructions that are significantly different from the orignal
         # returns a numpy array containing a threshold for each signal
         real_values = self.thresh_df.to_numpy()[:,1:]
@@ -548,7 +566,7 @@ class SynCAN_Evaluator:
         reconstruction = self.reconstruct(self.thresh_ds)
         reconstructed_values = reconstruction.to_numpy()
         thresh_se = np.square(real_values - reconstructed_values)
-        self.thresholds = thresh_se.mean(axis=0) + (num_stds * thresh_se.std(axis=0))
+        self.thresholds = np.max(thresh_se, axis=0)
         if self.verbose:
             print('Setting squared-error thresholds...')
             for i, t in enumerate(self.thresholds):
@@ -607,6 +625,52 @@ class SynCAN_Evaluator:
             print(f'Number of predicted anomalies: {len(pred_ranges)}')
             print(f'Number of correct predictions: {num_correct}')
         return num_correct / len(pred_ranges)
+    
+    def ROC(self):
+        return
+
+    def create_window_labels(self, message_labels):
+        labels = []
+        stride = self.params['seq_stride']
+        steps = self.params['time_steps']
+        for i in range(0, len(message_labels), stride)[:-1]:
+            window = message_labels.iloc[i:i+steps]
+            if len(window[window==1]) > 0:
+                labels.append(1)
+            else:
+                labels.append(0)
+        return labels
+    
+    def get_predictions(self, labels, reconstructions):
+        predictions = []
+        for i, reconstruction in zip(range(0, len(self.evaluation_df), self.params['seq_stride'])[:-1], reconstructions):
+            real_values = self.evaluation_df.to_numpy()[i:i+self.params['time_steps'],1:]
+            se = np.square(real_values - reconstruction)
+            pred = np.max(1*(se > self.thresholds), axis=1)
+            if np.sum(pred) > 0:
+                predictions.append(1)
+            else:
+                predictions.append(0)
+        return predictions
+
+    def test(self, model, eval_df, thresh_stds):
+        self.model = model
+        self.set_thresholds(thresh_stds, plot=False)
+        evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
+        reconstructions = model.predict(evaluation_ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
+        message_labels = self.evaluation_df['Label']
+        labels = self.create_window_labels(message_labels)
+        print(len(labels), len(reconstructions))
+        predictions = self.get_predictions(labels, reconstructions)
+        print(f'accuracy: {np.mean(np.array(predictions)==np.array(labels)):.5}')
+        print(f'balanced accuracy: {metrics.balanced_accuracy_score(labels, predictions):.5}')
+        print(f'f1 score: {metrics.f1_score(labels, predictions):.5}')
+        print(f'precision score: {metrics.precision_score(labels, predictions):.5}')
+        print(f'recall score: {metrics.recall_score(labels, predictions):.5}')
+        # if self.verbose:
+            # print(f'Reconstructing evaluation data...')
+        
+        return
 
     def evaluate(self, model, eval_df, thresh_stds=2, plot_thresholds=False):
         self.model = model
@@ -670,5 +734,3 @@ class SynCAN_Evaluator:
         plt.tight_layout()
         plt.show()
         return
-
-    
