@@ -227,8 +227,12 @@ def plot_loss(model):
     val_loss_list = model.val_loss_list # global loss list
 
     for lst in range(len(loss_list)):
-      plt.plot(loss_list[lst], label = 'Client ' + (i+1))
-    plt.plot(val_loss_list, label = 'Global Model')
+      plt.plot([i for i in range(len(loss_list[0]))], loss_list[lst], label = 'Client ' + str(lst+1))
+    plt.plot([i for i in range(len(loss_list[0]))], val_loss_list[1:], label = 'Global Model')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss Value')
+    plt.legend()
+    plt.show()
     return
 
 
@@ -335,8 +339,8 @@ class FederatedClient:
             shuffle=True,
             callbacks=callbacks_list,
             verbose=verbose)
-        # loss = history.history[-1]
-        loss = 0
+        loss = history.history['loss']
+        # loss = 0
         return loss
     
     def iterate(self):
