@@ -321,20 +321,23 @@ class FederatedClient:
             tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
             callbacks_list.append(tensorboard_callback)
         verbose = 'auto' if self.verbose else 0
-        self.model.fit(self.dataset,
+        history = self.model.fit(self.dataset,
             epochs=self.params['epochs_per_round'],
             use_multiprocessing=True,
             workers=6,
             shuffle=True,
             callbacks=callbacks_list,
             verbose=verbose)
-        return
+        # loss = history.history[-1]
+        loss = 0
+        return loss
     
     def iterate(self):
-        self.train_model()
+        loss = self.train_model()
         save_path = self.params['model_dir']+'client'+str(self.client_id)+'_model_'+str(self.iteration)+'.h5'
         tf.keras.models.save_model(self.model, save_path)
         self.iteration += 1
+        return loss
 
     def run_client(self):
         if self.verbose:
@@ -436,6 +439,7 @@ class FederatedLearning:
         self.tensorboard = tensorboard
         self.aggregator = FederatedAggregator(params, verbose=verbose)
         self.aggregator.initialize_model()
+        self.client_loss = []
         self.initialize_clients(data_split=data_split)
         return
 
@@ -469,6 +473,7 @@ class FederatedLearning:
             if self.verbose:
                 print()
             start = end
+            self.client_loss.append([])
         return
     
     def validate_global_model(self):
@@ -483,7 +488,8 @@ class FederatedLearning:
             print(f"\rIteration {self.iteration+1}/{self.params['num_iterations']} - Client {j+1}/{len(self.clients)}", end='')
             if self.verbose:
                 print()
-            client.iterate()
+            loss = client.iterate()
+            self.client_loss[j].append(loss)
         self.aggregator.iterate()
         if validate:
             print('\rValidating global model...', end='')
@@ -526,7 +532,7 @@ class SynCAN_Evaluator:
         self.verbose = verbose
         return
 
-    def reconstruct(self, ds): # used for reconstructing signals with a saved model into a continuous dataframe
+    def reconstruct(self, ds, ret_subseqs=False): # used for reconstructing signals with a saved model into a continuous dataframe
         reconstruction = self.model.predict(ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
         time_steps = self.params['time_steps']
         seq_stride = self.params['seq_stride']
@@ -539,25 +545,11 @@ class SynCAN_Evaluator:
             rest = rest.reshape(-1, rest.shape[-1])
             reconstruction = np.concatenate((first, rest))
         columns = ['Signal'+str(i+1) for i in range(reconstruction.shape[-1])]
-        return pd.DataFrame(reconstruction, columns=columns)
+        if ret_subseqs:
+            return pd.DataFrame(reconstruction, columns=columns), reconstruction
+        else:
+            return pd.DataFrame(reconstruction, columns=columns)
 
-    # def set_thresholds(self, num_stds, plot=False): # used for detecting reconstructions that are significantly different from the orignal
-    #     # returns a numpy array containing a threshold for each signal
-    #     real_values = self.thresh_df.to_numpy()[:,1:]
-    #     if self.verbose:
-    #         print('Reconstructing threshold-selection data...')
-    #     reconstruction = self.reconstruct(self.thresh_ds)
-    #     reconstructed_values = reconstruction.to_numpy()
-    #     thresh_se = np.square(real_values - reconstructed_values)
-    #     self.thresholds = thresh_se.mean(axis=0) + (num_stds * thresh_se.std(axis=0))
-    #     if self.verbose:
-    #         print('Setting squared-error thresholds...')
-    #         for i, t in enumerate(self.thresholds):
-    #             print(f'Signal {str(i+1)}: {t:.5}')
-    #     if plot:
-    #         self.plot_error_thresholds(thresh_se)
-    #     return
-    
     def set_thresholds(self, num_stds, plot=False): # used for detecting reconstructions that are significantly different from the orignal
         # returns a numpy array containing a threshold for each signal
         real_values = self.thresh_df.to_numpy()[:,1:]
@@ -566,7 +558,8 @@ class SynCAN_Evaluator:
         reconstruction = self.reconstruct(self.thresh_ds)
         reconstructed_values = reconstruction.to_numpy()
         thresh_se = np.square(real_values - reconstructed_values)
-        self.thresholds = np.max(thresh_se, axis=0)
+        self.thresholds = thresh_se.mean(axis=0) + (num_stds * thresh_se.std(axis=0))
+        # self.thresholds = np.max(thresh_se, axis=0)
         if self.verbose:
             print('Setting squared-error thresholds...')
             for i, t in enumerate(self.thresholds):
@@ -626,9 +619,6 @@ class SynCAN_Evaluator:
             print(f'Number of correct predictions: {num_correct}')
         return num_correct / len(pred_ranges)
     
-    def ROC(self):
-        return
-
     def create_window_labels(self, message_labels):
         labels = []
         stride = self.params['seq_stride']
@@ -653,39 +643,44 @@ class SynCAN_Evaluator:
                 predictions.append(0)
         return predictions
 
-    def test(self, model, eval_df, thresh_stds):
+    def evaluate(self, model, eval_df, thresh_stds):
         self.model = model
         self.set_thresholds(thresh_stds, plot=False)
         evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
-        reconstructions = model.predict(evaluation_ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
-        message_labels = self.evaluation_df['Label']
-        labels = self.create_window_labels(message_labels)
-        print(len(labels), len(reconstructions))
-        predictions = self.get_predictions(labels, reconstructions)
-        print(f'accuracy: {np.mean(np.array(predictions)==np.array(labels)):.5}')
-        print(f'balanced accuracy: {metrics.balanced_accuracy_score(labels, predictions):.5}')
-        print(f'f1 score: {metrics.f1_score(labels, predictions):.5}')
-        print(f'precision score: {metrics.precision_score(labels, predictions):.5}')
-        print(f'recall score: {metrics.recall_score(labels, predictions):.5}')
-        # if self.verbose:
-            # print(f'Reconstructing evaluation data...')
-        
-        return
-
-    def evaluate(self, model, eval_df, thresh_stds=2, plot_thresholds=False):
-        self.model = model
-        self.set_thresholds(thresh_stds, plot_thresholds)
-        evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
-        labels = self.evaluation_df['Label']
         if self.verbose:
             print(f'Reconstructing evaluation data...')
-        self.reconstructed_df = self.reconstruct(evaluation_ds)
+        self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
+        reconstructions = model.predict(evaluation_ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
+        message_labels = self.evaluation_df['Label']
         if self.verbose:
-            print('Predicting anomalies using thresholds...')
+            print('Labeling reconstructed subsequences...')
+        labels = self.create_window_labels(message_labels)
+        if self.verbose:
+            print('Creating predictions...')
+        predictions = self.get_predictions(labels, reconstructions)
         self.set_predictions()
-        print(f'\nAccuracy: {self.get_accuracy(labels):.5}\n\n')
+        print(f'Accuracy: {np.mean(np.array(predictions)==np.array(labels)):.5}')
+        print(f'Balanced Accuracy: {metrics.balanced_accuracy_score(labels, predictions):.5}')
+        print(f'F1 Score: {metrics.f1_score(labels, predictions):.5}')
+        print(f'Precision Score: {metrics.precision_score(labels, predictions):.5}')
+        print(f'Recall Score: {metrics.recall_score(labels, predictions):.5}')
         return
+
+    # def evaluate(self, model, eval_df, thresh_stds=2, plot_thresholds=False):
+    #     self.model = model
+    #     self.set_thresholds(thresh_stds, plot_thresholds)
+    #     evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
+    #     labels = self.evaluation_df['Label']
+    #     if self.verbose:
+    #         print(f'Reconstructing evaluation data...')
+    #     self.reconstructed_df = self.reconstruct(evaluation_ds)
+    #     self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
+    #     if self.verbose:
+    #         print('Predicting anomalies using thresholds...')
+    #     self.set_predictions()
+    #     print(f'\nAccuracy: {self.get_accuracy(labels):.5}\n\n')
+    #     return
 
     def visualize_reconstruction(self, start_time=0, end_time=None, highlight_anomalies=False, highlight_predictions=False, plot_squared_error=False):
         # accepts two dataframes of the same length with the same number of signals - keys must be Signal1, Signal2,...
