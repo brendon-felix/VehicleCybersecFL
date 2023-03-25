@@ -18,26 +18,6 @@ def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports 
     df.index = df.index - df.index.min()      # set starting time to 0
     end_time = df.index.max() if not end_time else end_time
     df = df[((df.index >= start_time) & (df.index < end_time))]
-    print(f'{len(df):,} total messages (import numpy as np
-import pandas as pd
-import tensorflow as tf
-from keras import layers
-from sklearn import metrics
-import seaborn as sns
-import matplotlib.pyplot as plt
-import os.path
-import time
-
-#DEFINE FUNCTIONS
-#_______________________________________________________________________________________________________________________
-
-def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports SynCAN csv into dataframe
-    df = pd.read_csv(csv_path, header=None, skiprows=1, names=['Label',  'Time', 'ID',
-                                                               'Signal1',  'Signal2',  'Signal3',  'Signal4'])
-    df = pd.DataFrame(df.set_index(df.Time))
-    df.index = df.index - df.index.min()      # set starting time to 0
-    end_time = df.index.max() if not end_time else end_time
-    df = df[((df.index >= start_time) & (df.index < end_time))]
     print(f'{len(df):,} total messages (id1,id2,...,id10)')
     df_labels = df.iloc[:,0:1].astype(int)
     if msg_id:
