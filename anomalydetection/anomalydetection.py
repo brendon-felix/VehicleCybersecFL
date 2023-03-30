@@ -530,6 +530,7 @@ class FederatedLearning:
     def run_server(self, validation=False, test=False):
         if self.verbose:
             print('Starting Server...')
+        self.aggregator.initialize_model()
         num_iterations = self.params['num_iterations']
         for i in range(num_iterations):
             if self.iterate(validation):    # early stop if validation loss increases
