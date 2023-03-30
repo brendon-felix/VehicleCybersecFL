@@ -317,7 +317,7 @@ class FederatedClient:
         interval = 2
         while not os.path.exists(file_path):
             if self.verbose:
-                print(f'\rWaiting for global model {self.iteration-1}: Retrying in {interval} seconds...', end='')
+                print(f'\rWaiting for global model {self.iteration-1}...', end='')
             time.sleep(interval)
         global_model = tf.keras.models.load_model(file_path)
         self.model.set_weights(global_model.get_weights())
@@ -393,9 +393,8 @@ class FederatedAggregator:
         for i in range(num_clients):
             file_path = self.params['model_dir']+'client'+str(i)+'_model_'+str(self.iteration)+'.h5'
             while not os.path.exists(file_path):
-                attempt = 1
                 if self.verbose:
-                    print(f'\rWaiting for client {i}: Retrying in {interval} seconds...', end='')
+                    print(f'\rWaiting for client {i}...', end='')
                 time.sleep(interval)
             if self.verbose:
                 print()
