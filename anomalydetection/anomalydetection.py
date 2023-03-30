@@ -236,6 +236,8 @@ def plot_loss(model):
     return
 
 
+
+
 #DEFINE CLASSES
 #_______________________________________________________________________________________________________________________
 
@@ -292,7 +294,7 @@ class CentralizedModel:
 
 class FederatedClient:
     client_id = 0
-    def __init__(self, dataframe, params, client_id=None, verbose=False, tensorboard=False):
+    def __init__(self, dataframe, params, client_id=None, verbose=False):
         self.dataset, self.dataframe = create_dataset(dataframe, params, verbose=verbose)
         self.params = params
         if client_id:
@@ -301,7 +303,6 @@ class FederatedClient:
             self.client_id = FederatedClient.client_id
             FederatedClient.client_id += 1
         self.verbose = verbose
-        self.tensorboard = tensorboard
         self.iteration = 1
         return
     
@@ -313,10 +314,11 @@ class FederatedClient:
     
     def load_global_model(self):
         file_path = self.params['model_dir']+'global_model_'+str(self.iteration-1)+'.h5'
+        interval = 2
         while not os.path.exists(file_path):
             if self.verbose:
-                print(f'\rWaiting for global model {self.iteration-1}: Retrying in 10 seconds...', end='')
-            time.sleep(10)
+                print(f'\rWaiting for global model {self.iteration-1}: Retrying in {interval} seconds...', end='')
+            time.sleep(interval)
         global_model = tf.keras.models.load_model(file_path)
         self.model.set_weights(global_model.get_weights())
         return
@@ -327,10 +329,6 @@ class FederatedClient:
         callbacks_list = [
             tf.keras.callbacks.EarlyStopping(monitor='loss', patience=self.params['patience']),
             ]
-        if self.tensorboard:
-            logdir = self.params['model_dir']+"logs/client"+str(self.client_id)+'_'+str(self.iteration)
-            tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
-            callbacks_list.append(tensorboard_callback)
         verbose = 'auto' if self.verbose else 0
         history = self.model.fit(self.dataset,
             epochs=self.params['epochs_per_round'],
@@ -387,6 +385,7 @@ class FederatedAggregator:
         return
     
     def load_client_models(self):
+        interval = 2 #seconds
         num_clients = self.params['num_clients']
         self.client_models = []
         if self.verbose:
@@ -394,9 +393,12 @@ class FederatedAggregator:
         for i in range(num_clients):
             file_path = self.params['model_dir']+'client'+str(i)+'_model_'+str(self.iteration)+'.h5'
             while not os.path.exists(file_path):
+                attempt = 1
                 if self.verbose:
-                    print(f'\rWaiting for client {i}: Retrying in 10 seconds...', end='')
-                time.sleep(10)
+                    print(f'\rWaiting for client {i}: Retrying in {interval} seconds...', end='')
+                time.sleep(interval)
+            if self.verbose:
+                print()
             client_model = tf.keras.models.load_model(file_path)
             self.client_models.append(client_model)
         return
@@ -425,36 +427,28 @@ class FederatedAggregator:
         self.iteration += 1
         return
 
-    def run_aggregation(self):
-        if self.verbose:
-            print(f'Starting Aggregator...')
-        num_iterations = self.params['num_iterations']
-        for i in range(num_iterations):
-            self.iteration = i+1
-            print(f'\rIteration {self.iteration}/{num_iterations}', end='')
-            if self.verbose:
-                print()
-            self.iterate()
-        print()
-
 #_______________________________________________________________________________________________________________________
 
 class FederatedLearning:
-    #   This class is used to perform a FL simulation on one runtime whichs trains and aggregates multiple clients
-    def __init__(self, dataframe, params, data_split=None, verbose=False, tensorboard=False):
-        self.ds_dict, self.df_dict = get_train_val_test(dataframe, params, verbose=verbose)
+    def __init__(self, params, dataframe=None, verbose=False):
         self.params = params
         self.verbose = verbose
         self.val_loss_list = [float('inf')]
         self.iteration = 0
-        self.tensorboard = tensorboard
         self.aggregator = FederatedAggregator(params, verbose=verbose)
-        self.aggregator.initialize_model()
+        if dataframe is not None:
+            self.ds_dict, self.df_dict = get_train_val_test(dataframe, params, verbose=verbose)
+        else:
+            self.ds_dict = None
+            self.df_dict = None
         self.client_loss = []
-        self.initialize_clients(data_split=data_split)
+        self.clients = None
         return
 
     def initialize_clients(self, data_split=None):
+        if self.df_dict is None:
+            print("No training data given! Please set object parameter 'dataframe'")
+            return
         train_df = self.df_dict['train']
         num_clients = self.params['num_clients']
         if data_split:
@@ -477,8 +471,7 @@ class FederatedLearning:
                 df,
                 self.params,
                 client_id=i,
-                verbose=self.verbose,
-                tensorboard=self.tensorboard)
+                verbose=self.verbose)
             new_client.initialize_model()
             self.clients.append(new_client)
             if self.verbose:
@@ -488,49 +481,68 @@ class FederatedLearning:
         return
     
     def validate_global_model(self):
+        if self.ds_dict is None:
+            print("No validation data given! Please set object parameter 'dataframe'")
+            return
+        print('\rValidating global model...', end='')
+        if self.verbose:
+            print()
         verbose = 'auto' if self.verbose else 0
         loss, metric = self.aggregator.global_model.evaluate(self.ds_dict['val'], verbose=verbose)
         if self.verbose:
             print(f"Validation loss: {loss:.5}\nValidation {self.params['metric']}: {metric:.5}")
         self.val_loss_list.append(loss)
+        return
 
     def iterate(self, validate=True):
-        for j, client in enumerate(self.clients):
-            print(f"\rIteration {self.iteration+1}/{self.params['num_iterations']} - Client {j+1}/{len(self.clients)}", end='')
-            if self.verbose:
-                print()
-            loss = client.iterate()
-            self.client_loss[j].append(loss)
+        if self.clients is not None:
+            for j, client in enumerate(self.clients):
+                print(f"\rIteration {self.iteration+1}/{self.params['num_iterations']} - Client {j+1}/{len(self.clients)}", end='')
+                if self.verbose:
+                    print()
+                loss = client.iterate()
+                self.client_loss[j].append(loss)
+        else:
+            print(f"\rIteration {self.iteration+1}/{self.params['num_iterations']}", end='')
+        if self.verbose:
+            print()
         self.aggregator.iterate()
         if validate:
-            print('\rValidating global model...', end='')
-            if self.verbose:
-                print()
-            val_loss_list = [v for v in self.val_loss_list]
+            min_loss = np.min(self.val_loss_list)
             self.validate_global_model()
-            for loss in val_loss_list:
-                if loss < self.val_loss_list[-1]:
-                    return True
-        for client in self.clients:
-            client.load_global_model()
+            if self.val_loss_list[-1] > min_loss:
+                return True
+        if self.clients is not None:
+            for client in self.clients:
+                client.load_global_model()
         self.iteration += 1
         return False
 
     def test_global_model(self):
+        if self.ds_dict is None:
+            print("No testing data given! Please set object parameter 'dataframe'")
+            return
         print('\rTesting global model...')
         verbose = 'auto' if self.verbose else 0
         loss, metric = self.aggregator.global_model.evaluate(self.ds_dict['test'], verbose=verbose)
         print(f"Test loss: {loss:.5}\nTest {self.params['metric']}: {metric:.5}")
-
-    def run_federated_learning(self, validation=False, test=False):
+        return
+    
+    def run_server(self, validation=False, test=False):
+        if self.verbose:
+            print('Starting Server...')
         num_iterations = self.params['num_iterations']
         for i in range(num_iterations):
-            if self.iterate(validate=validation):
+            if self.iterate(validation):    # early stop if validation loss increases
                 break
-            if self.verbose:
-                print()
         if test:
             self.test_global_model()
+        return
+    
+    def run_federated_learning(self, data_split=None, validation=False, test=False):
+        self.initialize_clients(data_split=data_split)
+        self.run_server(validation, test)
+        return
 
 #_______________________________________________________________________________________________________________________
 
