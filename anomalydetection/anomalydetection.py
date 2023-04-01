@@ -151,8 +151,8 @@ def create_dataset(df, params, batch_size=None, verbose=False):
                             batch_size=params['batch_size'],
                             warm_up=warm_up)
     start_idx = warm_up
-    end_idx = (((len(df)-start_idx) // seq_stride) * seq_stride) + start_idx
-    df = df.iloc[start_idx:end_idx]
+    df_length = ((ds.__len__().numpy() * time_steps) // 2) + seq_stride
+    df = df.iloc[start_idx:start_idx+df_length]
     if verbose:
         num_sequences = ((len(df)-time_steps-warm_up) // seq_stride) + 1
         print(f"{num_sequences:,} subsequences of length {time_steps}")
