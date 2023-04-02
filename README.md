@@ -1,6 +1,6 @@
 # Federated Learning for Vehicle Cybersecurity
  
-![FederatedCyberSecFL](https://user-images.githubusercontent.com/124619546/229372532-9bf23b02-e025-4eb9-9bc6-5ebbf8fed500.jpg)
+ <img src="https://user-images.githubusercontent.com/124619546/229372532-9bf23b02-e025-4eb9-9bc6-5ebbf8fed500.jpg" width="50%" height="50%">
 
 Federated Learning for Vehicle Cybersecurity is a Colorado State University ECE Senior Design project in which we implement a new federated learning model for vehicle cybersecurity that can be efficiently deployed and securely improved using online distributed training. This model will run in real time to detect intrusions into the Controller Area Network (CAN bus), which is a commonly used network for communication between modern automobile components.
 
