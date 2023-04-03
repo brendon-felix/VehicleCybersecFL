@@ -150,11 +150,10 @@ def create_dataset(df, params, batch_size=None, verbose=False):
                             data_is_target=True,
                             batch_size=params['batch_size'],
                             warm_up=warm_up)
-    start_idx = warm_up
-    df_length = ((ds.__len__().numpy() * time_steps) // 2) + seq_stride
-    df = df.iloc[start_idx:start_idx+df_length]
+    starting_indices = np.arange(warm_up, len(df) - time_steps, seq_stride)
+    df = df.iloc[starting_indices[0]:starting_indices[-1]+time_steps]
     if verbose:
-        num_sequences = ((len(df)-time_steps-warm_up) // seq_stride) + 1
+        num_sequences = len(starting_indices)
         print(f"{num_sequences:,} subsequences of length {time_steps}")
         print(f"{ds.__len__().numpy():,} batches (batch size {batch_size})")
     return ds, df
@@ -187,7 +186,7 @@ def get_train_val_test(df, params, verbose=False):
     dataframe_dict = {'train': train_df, 'val': val_df, 'test': test_df}
     return dataset_dict, dataframe_dict
 
-def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
+def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False, attention=False):
     inputs = layers.Input(shape=(time_steps+warm_up, input_dim)) # shape = (time_steps, data_dimension/num_features)
     # encoder
     x = layers.Dense(latent_dim*2, activation='tanh')(inputs)
@@ -197,10 +196,12 @@ def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False):
         enc_out = layers.Dropout(0.2)(enc_out)
         enc_hidden = layers.Dropout(0.2)(enc_hidden)
     # decoder
-    dec_out, dec_hidden = layers.GRU(latent_dim, return_sequences=True, return_state=True, activation="tanh")(enc_out)
+    dec_out, dec_hidden = layers.GRU(latent_dim, return_sequences=True, return_state=True, activation="tanh")(enc_out, initial_state=enc_hidden)
     if drop_out:
         dec_out = layers.Dropout(0.2)(dec_out)
         dec_hidden = layers.Dropout(0.2)(dec_hidden)
+    if attention:
+        dec_out = layers.Attention()([enc_out, dec_out])
     outputs = layers.Lambda(lambda x: x[:, warm_up:, :])(dec_out)   # used to remove the warm start time steps from the predictions
     outputs = layers.Dense(input_dim, activation='tanh')(outputs)
     model = tf.keras.Model(inputs, outputs)
@@ -212,7 +213,8 @@ def create_model(params):
         params['warm_up'],
         params['input_dim'],
         params['latent_dim'],
-        params['drop_out'])
+        params['drop_out'],
+        params['attention'])
     return model
 
 def compile_model(model, params):
@@ -752,3 +754,4 @@ class SynCAN_Evaluator:
         plt.tight_layout()
         plt.show()
         return
+
