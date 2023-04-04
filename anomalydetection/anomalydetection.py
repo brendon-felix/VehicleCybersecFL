@@ -692,26 +692,30 @@ class SynCAN_Evaluator:
         else:
             return pd.DataFrame(reconstruction, columns=columns)
 
-    def set_thresholds(self, num_stds, plot=False):
+    def reconstruct_threshold_data(self):
         '''
         DOCSTRING
         '''
-        # used for detecting reconstructions that are significantly different from the orignal
-        # returns a numpy array containing a threshold for each signal
         real_values = self.thresh_df.to_numpy()[:,1:]
         if self.verbose:
             print('Reconstructing threshold-selection data...')
         reconstruction = self.reconstruct(self.thresh_ds)
         reconstructed_values = reconstruction.to_numpy()
-        thresh_se = np.square(real_values - reconstructed_values)
-        self.thresholds = thresh_se.mean(axis=0) + (num_stds * thresh_se.std(axis=0))
+        self.thresh_se = np.square(real_values - reconstructed_values)
+        return
+    
+    def set_thresholds(self, num_stds, plot=False):
+        '''
+        DOCSTRING
+        '''
+        self.thresholds = self.thresh_se.mean(axis=0) + (num_stds * self.thresh_se.std(axis=0))
         # self.thresholds = np.max(thresh_se, axis=0)
         if self.verbose:
             print('Setting squared-error thresholds...')
             for i, t in enumerate(self.thresholds):
                 print(f'Signal {str(i+1)}: {t:.5}')
         if plot:
-            self.plot_error_thresholds(thresh_se)
+            self.plot_error_thresholds(self.thresh_se)
         return
     
     def plot_error_thresholds(self, squared_error):
@@ -787,29 +791,20 @@ class SynCAN_Evaluator:
             prediction = 1 if np.sum(pred) > 0 else 0
             predictions.append(prediction)
         return np.array(predictions)
-
-    def evaluate(self, model, eval_df, thresh_stds):
+    
+    def get_results(self, reconstructions):
         '''
         DOCSTRING
         '''
-        self.model = model
-        self.set_thresholds(thresh_stds, plot=False)
-        evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
-        if self.verbose:
-            print(f'Reconstructing evaluation data...')
-        self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
-        self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
-        message_labels = self.evaluation_df['Label']
-        window_labels = self.create_window_labels(message_labels)
-        print(f'Percentage of anomalous windows: {np.mean(window_labels==1)}')
         window_predictions = self.create_window_predictions(reconstructions)
-        print(f'Percentage of anomalous predictions: {np.mean(window_predictions==1)}')
+        if self.verbose:
+            print(f'Percentage of anomalous predictions: {np.mean(window_predictions==1)*100:.3f}%')
         self.set_message_predictions(window_predictions)
-        accuracy = np.mean(np.array(window_predictions)==np.array(window_labels))
-        bal_accuracy = metrics.balanced_accuracy_score(window_labels, window_predictions)
-        f1_score = metrics.f1_score(window_labels, window_predictions)
-        precision = metrics.precision_score(window_labels, window_predictions)
-        recall = metrics.recall_score(window_labels, window_predictions)
+        accuracy = np.mean(np.array(window_predictions)==np.array(self.window_labels))
+        bal_accuracy = metrics.balanced_accuracy_score(self.window_labels, window_predictions)
+        f1_score = metrics.f1_score(self.window_labels, window_predictions)
+        precision = metrics.precision_score(self.window_labels, window_predictions)
+        recall = metrics.recall_score(self.window_labels, window_predictions)
         if self.verbose:
             print(f'Accuracy: {accuracy:.5}')
             print(f'Balanced Accuracy: {bal_accuracy:.5}')
@@ -822,6 +817,29 @@ class SynCAN_Evaluator:
                 'precision': precision,
                 'recall': recall}
 
+    def evaluate(self, model, eval_df, thresh_stds):
+        '''
+        DOCSTRING
+        '''
+        self.model = model
+        self.reconstruct_threshold_data()
+        evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
+        if self.verbose:
+            print(f'Reconstructing evaluation data...')
+        self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
+        self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
+        message_labels = self.evaluation_df['Label']
+        self.window_labels = self.create_window_labels(message_labels)
+        if self.verbose:
+            print(f'Percentage of anomalous windows: {np.mean(self.window_labels==1)*100:.3f}%')
+        results = []
+        for ts in list(thresh_stds):
+            if self.verbose:
+                print(f'\nThresholds set to {ts} standard deviations')
+            self.set_thresholds(ts, plot=False)
+            results.append(self.get_results(reconstructions))
+        return pd.DataFrame(results)
+    
     def visualize_reconstruction(self, start_time=0, end_time=None, highlight_anomalies=False, highlight_predictions=False, plot_squared_error=False):
         '''
         DOCSTRING
