@@ -816,7 +816,6 @@ class SynCAN_Evaluator:
             print(f'Reconstructing evaluation data...')
         self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
-        reconstructions = model.predict(evaluation_ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
         message_labels = self.evaluation_df['Label']
         if self.verbose:
             print('Labeling reconstructed subsequences...')
