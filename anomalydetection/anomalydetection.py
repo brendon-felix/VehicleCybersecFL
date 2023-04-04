@@ -8,10 +8,15 @@ import matplotlib.pyplot as plt
 import os.path
 import time
 
-#DEFINE FUNCTIONS
-#_______________________________________________________________________________________________________________________
+'''
+DEFINE GLOBAL FUNCTIONS
+_______________________________________________________________________________________________________________________
+'''
 
 def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports SynCAN csv into dataframe
+    '''
+    DOCSTRING
+    '''
     df = pd.read_csv(csv_path, header=None, skiprows=1, names=['Label',  'Time', 'ID',
                                                                'Signal1',  'Signal2',  'Signal3',  'Signal4'])
     df = pd.DataFrame(df.set_index(df.Time))
@@ -32,13 +37,19 @@ def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports 
     return df
 
 def clean_labels(df, msg_id, real_ranges):
+    '''
+    DOCSTRING
+    '''
     clean_df = df.copy()
     clean_df.Label = 0
     for start_time, end_time in real_ranges:
         clean_df.loc[start_time:end_time, 'Label'] = 1
     return clean_df
 
-def find_ranges(predictions, index): # used for highlighting in plots
+def find_ranges(predictions, index):
+    '''
+    DOCSTRING
+    ''' # used for highlighting in plots
     # accepts a dataframe of 1s and 0s
     # returns a list of range tuples which contain a start and end index
     ranges = []
@@ -59,6 +70,9 @@ def find_ranges(predictions, index): # used for highlighting in plots
     return ranges
 
 def visualize_data(df, start_time=0, end_time=None):
+    '''
+    DOCSTRING
+    '''
     num_signals = df.shape[1]-1
     end_time = df.index.max() if not end_time else end_time
     data = df[((df.index >= start_time) & (df.index < end_time))]
@@ -82,6 +96,9 @@ def visualize_data(df, start_time=0, end_time=None):
     return
 
 def sequences_from_indices(data, indices_ds, start_index, end_index):
+    '''
+    DOCSTRING
+    '''
     dataset = tf.data.Dataset.from_tensors(data[start_index : end_index])
     dataset = tf.data.Dataset.zip((dataset.repeat(), indices_ds)).map(
         tf.autograph.experimental.do_not_convert(lambda steps, inds: tf.gather(steps, inds)),  # pylint: disable=unnecessary-lambda
@@ -94,6 +111,9 @@ def timeseries_dataset(data, targets,
                         data_is_target=False,
                         warm_up=0,
                         batch_size=1):
+    '''
+    DOCSTRING
+    '''
     index_dtype = 'int32'
     start_index = 0
     end_index = len(data)
@@ -138,6 +158,9 @@ def timeseries_dataset(data, targets,
     return dataset
 
 def create_dataset(df, params, batch_size=None, verbose=False):
+    '''
+    DOCSTRING
+    '''
     time_steps = params['time_steps']
     seq_stride = params['seq_stride']
     warm_up = params['warm_up']
@@ -159,6 +182,9 @@ def create_dataset(df, params, batch_size=None, verbose=False):
     return ds, df
 
 def get_train_val_test(df, params, verbose=False):
+    '''
+    DOCSTRING
+    '''
     data_length = len(df)
     train_size = int(data_length*params['train_split'])
     val_size = int(data_length*params['val_split'])
@@ -187,6 +213,9 @@ def get_train_val_test(df, params, verbose=False):
     return dataset_dict, dataframe_dict
 
 def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False, attention=False):
+    '''
+    DOCSTRING
+    '''
     inputs = layers.Input(shape=(time_steps+warm_up, input_dim)) # shape = (time_steps, data_dimension/num_features)
     # encoder
     x = layers.Dense(latent_dim*2, activation='tanh')(inputs)
@@ -208,6 +237,9 @@ def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False, atte
     return model
 
 def create_model(params):
+    '''
+    DOCSTRING
+    '''
     model = autoencoder(
         params['time_steps'],
         params['warm_up'],
@@ -218,6 +250,9 @@ def create_model(params):
     return model
 
 def compile_model(model, params):
+    '''
+    DOCSTRING
+    '''
     model.compile(optimizer=tf.optimizers.Adam(
         learning_rate=params['learning_rate']),
         loss=params['loss_function'],
@@ -225,6 +260,9 @@ def compile_model(model, params):
     return
 
 def plot_loss(model):
+    '''
+    DOCSTRING
+    '''
     loss_list = model.client_loss # list of lists for each clients' losses
     val_loss_list = model.val_loss_list # global loss list
 
@@ -244,7 +282,13 @@ def plot_loss(model):
 #_______________________________________________________________________________________________________________________
 
 class CentralizedModel:
+    '''
+    DOCSTRING
+    '''
     def __init__(self, dataframe, params, file_name='model.h5', verbose=False):
+        '''
+        DOCSTRING
+        '''
         self.datasets, self.dataframes = get_train_val_test(dataframe, params, verbose=verbose)
         self.params = params
         self.save_path = params['model_dir']+file_name
@@ -253,6 +297,9 @@ class CentralizedModel:
         return
 
     def initialize_model(self):
+        '''
+        DOCSTRING
+        '''
         if self.verbose:
             print(f"Saving model to {self.params['model_dir']}")
             print('Initializing centralized model...\n')
@@ -261,6 +308,9 @@ class CentralizedModel:
         return
     
     def train_model(self, epochs=1, plot_loss=False, evaluate=False):
+        '''
+        DOCSTRING
+        '''
         callbacks_list = [
             tf.keras.callbacks.EarlyStopping(
                 monitor="val_loss",
@@ -295,8 +345,14 @@ class CentralizedModel:
 #_______________________________________________________________________________________________________________________
 
 class FederatedClient:
+    '''
+    DOCSTRING
+    '''
     client_id = 0
     def __init__(self, dataframe, params, client_id=None, verbose=False):
+        '''
+        DOCSTRING
+        '''
         self.dataset, self.dataframe = create_dataset(dataframe, params, verbose=verbose)
         self.params = params
         if client_id:
@@ -309,12 +365,18 @@ class FederatedClient:
         return
     
     def initialize_model(self):
+        '''
+        DOCSTRING
+        '''
         self.model = create_model(self.params)
         self.load_global_model()
         compile_model(self.model, self.params)
         return
     
     def load_global_model(self):
+        '''
+        DOCSTRING
+        '''
         file_path = self.params['model_dir']+'global_model_'+str(self.iteration-1)+'.h5'
         interval = 2
         while not os.path.exists(file_path):
@@ -326,6 +388,9 @@ class FederatedClient:
         return
     
     def train_model(self):
+        '''
+        DOCSTRING
+        '''
         if self.verbose:
             print('Training model...')
         callbacks_list = [
@@ -344,6 +409,9 @@ class FederatedClient:
         return loss
     
     def iterate(self):
+        '''
+        DOCSTRING
+        '''
         loss = self.train_model()
         save_path = self.params['model_dir']+'client'+str(self.client_id)+'_model_'+str(self.iteration)+'.h5'
         tf.keras.models.save_model(self.model, save_path)
@@ -351,6 +419,9 @@ class FederatedClient:
         return loss
 
     def run_client(self):
+        '''
+        DOCSTRING
+        '''
         if self.verbose:
             print(f'Starting Client {self.client_id}...')
         self.initialize_model()
@@ -370,6 +441,9 @@ class FederatedClient:
 class FederatedAggregator:
     #   This class is used to perform aggregation on saved clients models which may be training on a separate runtime
     def __init__(self, params, verbose=False):
+        '''
+        DOCSTRING
+        '''
         self.params = params
         self.verbose = verbose
         if verbose:
@@ -378,6 +452,9 @@ class FederatedAggregator:
         return
     
     def initialize_model(self):
+        '''
+        DOCSTRING
+        '''
         if self.verbose:
             print('Initializing global model...')
         self.global_model = create_model(self.params)
@@ -387,6 +464,9 @@ class FederatedAggregator:
         return
     
     def load_client_models(self):
+        '''
+        DOCSTRING
+        '''
         interval = 2 #seconds
         num_clients = self.params['num_clients']
         self.client_models = []
@@ -405,6 +485,9 @@ class FederatedAggregator:
         return
     
     def aggregate_client_models(self):
+        '''
+        DOCSTRING
+        '''
         if self.verbose:
             print('Aggregating client models...')
         global_weights = self.global_model.get_weights()    # used only for reshaping the client weights
@@ -421,6 +504,9 @@ class FederatedAggregator:
         return
     
     def iterate(self):
+        '''
+        DOCSTRING
+        '''
         self.load_client_models()
         self.aggregate_client_models()
         save_path = self.params['model_dir']+'global_model_'+str(self.iteration)+'.h5'
@@ -431,7 +517,13 @@ class FederatedAggregator:
 #_______________________________________________________________________________________________________________________
 
 class FederatedLearning:
+    '''
+    DOCSTRING
+    '''
     def __init__(self, params, dataframe=None, verbose=False):
+        '''
+        DOCSTRING
+        '''
         self.params = params
         self.verbose = verbose
         self.val_loss_list = [float('inf')]
@@ -447,6 +539,9 @@ class FederatedLearning:
         return
 
     def initialize_clients(self, data_split=None):
+        '''
+        DOCSTRING
+        '''
         if self.df_dict is None:
             print("No training data given! Please set object parameter 'dataframe'")
             return
@@ -482,6 +577,9 @@ class FederatedLearning:
         return
     
     def validate_global_model(self):
+        '''
+        DOCSTRING
+        '''
         if self.ds_dict is None:
             print("No validation data given! Please set object parameter 'dataframe'")
             return
@@ -520,6 +618,9 @@ class FederatedLearning:
         return False
 
     def test_global_model(self):
+        '''
+        DOCSTRING
+        '''
         if self.ds_dict is None:
             print("No testing data given! Please set object parameter 'dataframe'")
             return
@@ -530,6 +631,9 @@ class FederatedLearning:
         return
     
     def run_server(self, validation=False, test=False):
+        '''
+        DOCSTRING
+        '''
         if self.verbose:
             print('Starting Server...')
         self.aggregator.initialize_model()
@@ -542,6 +646,9 @@ class FederatedLearning:
         return
     
     def run_federated_learning(self, data_split=None, validation=False, test=False):
+        '''
+        DOCSTRING
+        '''
         self.initialize_clients(data_split=data_split)
         self.run_server(validation, test)
         return
@@ -549,7 +656,13 @@ class FederatedLearning:
 #_______________________________________________________________________________________________________________________
 
 class SynCAN_Evaluator:
+    '''
+    DOCSTRING
+    '''
     def __init__(self, thresh_df, params, verbose=False):
+        '''
+        DOCSTRING
+        '''
         if verbose:
             print('Creating threshold dataset...')
         self.thresh_ds, self.thresh_df = create_dataset(thresh_df, params, verbose=verbose)
@@ -557,7 +670,11 @@ class SynCAN_Evaluator:
         self.verbose = verbose
         return
 
-    def reconstruct(self, ds, ret_subseqs=False): # used for reconstructing signals with a saved model into a continuous dataframe
+    def reconstruct(self, ds, ret_subseqs=False):
+        '''
+        DOCSTRING
+        '''
+        # used for reconstructing signals with a saved model into a continuous dataframe
         reconstruction = self.model.predict(ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
         time_steps = self.params['time_steps']
         seq_stride = self.params['seq_stride']
@@ -575,7 +692,11 @@ class SynCAN_Evaluator:
         else:
             return pd.DataFrame(reconstruction, columns=columns)
 
-    def set_thresholds(self, num_stds, plot=False): # used for detecting reconstructions that are significantly different from the orignal
+    def set_thresholds(self, num_stds, plot=False):
+        '''
+        DOCSTRING
+        '''
+        # used for detecting reconstructions that are significantly different from the orignal
         # returns a numpy array containing a threshold for each signal
         real_values = self.thresh_df.to_numpy()[:,1:]
         if self.verbose:
@@ -594,6 +715,9 @@ class SynCAN_Evaluator:
         return
     
     def plot_error_thresholds(self, squared_error):
+        '''
+        DOCSTRING
+        '''
         num_signals = params['num_signals']
         fig, axes = plt.subplots(nrows=num_signals, ncols=1, figsize=(13, 2*num_signals))
         for i in range(num_signals): # Plot histograms of squared error values and mean + threshold lines
@@ -616,7 +740,11 @@ class SynCAN_Evaluator:
         plt.show()
         return
 
-    def set_predictions(self): # used to label messages as normal or anomalous
+    def set_predictions(self):
+        '''
+        DOCSTRING
+        '''
+        # used to label messages as normal or anomalous
         # accepts two dataframes of the same length containing the same number of signals
         # returns a numpy array of 1s and 0s similar to the labels in df
         real_values = self.evaluation_df.to_numpy()[:,1:]      # remove labels before reconstruction
@@ -627,6 +755,9 @@ class SynCAN_Evaluator:
         return
 
     def get_accuracy(self, labels):
+        '''
+        DOCSTRING
+        '''
         labels = self.evaluation_df['Label']
         real_ranges = find_ranges(labels.to_numpy(), labels.index)
         pred_ranges = find_ranges(self.predictions, labels.index)
@@ -645,6 +776,9 @@ class SynCAN_Evaluator:
         return num_correct / len(pred_ranges)
     
     def create_window_labels(self, message_labels):
+        '''
+        DOCSTRING
+        '''
         labels = []
         stride = self.params['seq_stride']
         steps = self.params['time_steps']
@@ -657,6 +791,9 @@ class SynCAN_Evaluator:
         return labels
     
     def get_predictions(self, labels, reconstructions):
+        '''
+        DOCSTRING
+        '''
         predictions = []
         for i, reconstruction in zip(range(0, len(self.evaluation_df), self.params['seq_stride'])[:-1], reconstructions):
             real_values = self.evaluation_df.to_numpy()[i:i+self.params['time_steps'],1:]
@@ -669,6 +806,9 @@ class SynCAN_Evaluator:
         return predictions
 
     def evaluate(self, model, eval_df, thresh_stds):
+        '''
+        DOCSTRING
+        '''
         self.model = model
         self.set_thresholds(thresh_stds, plot=False)
         evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
@@ -676,7 +816,6 @@ class SynCAN_Evaluator:
             print(f'Reconstructing evaluation data...')
         self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
-        reconstructions = model.predict(evaluation_ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
         message_labels = self.evaluation_df['Label']
         if self.verbose:
             print('Labeling reconstructed subsequences...')
@@ -708,6 +847,9 @@ class SynCAN_Evaluator:
     #     return
 
     def visualize_reconstruction(self, start_time=0, end_time=None, highlight_anomalies=False, highlight_predictions=False, plot_squared_error=False):
+        '''
+        DOCSTRING
+        '''
         # accepts two dataframes of the same length with the same number of signals - keys must be Signal1, Signal2,...
         if self.verbose:
             print('Plotting reconstruction...')
