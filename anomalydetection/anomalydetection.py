@@ -675,20 +675,20 @@ class SynCAN_Evaluator:
         DOCSTRING
         '''
         # used for reconstructing signals with a saved model into a continuous dataframe
-        reconstruction = self.model.predict(ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
+        predictions = self.model.predict(ds, verbose=self.verbose, workers=-1, use_multiprocessing=True)
         time_steps = self.params['time_steps']
         seq_stride = self.params['seq_stride']
         if time_steps == seq_stride:
-            reconstruction = reconstruction.reshape(-1, reconstruction.shape[-1])
+            reconstruction = predictions.reshape(-1, predictions.shape[-1])
         else:
             # remove duplicate timesteps from predictions
-            first = reconstruction[0]
-            rest = reconstruction[1:, time_steps-seq_stride:]
+            first = predictions[0]
+            rest = predictions[1:, time_steps-seq_stride:]
             rest = rest.reshape(-1, rest.shape[-1])
             reconstruction = np.concatenate((first, rest))
         columns = ['Signal'+str(i+1) for i in range(reconstruction.shape[-1])]
         if ret_subseqs:
-            return pd.DataFrame(reconstruction, columns=columns), reconstruction
+            return pd.DataFrame(reconstruction, columns=columns), predictions
         else:
             return pd.DataFrame(reconstruction, columns=columns)
 
@@ -740,70 +740,54 @@ class SynCAN_Evaluator:
         plt.show()
         return
 
-    def set_predictions(self):
+    def set_message_predictions(self, predictions):
         '''
         DOCSTRING
         '''
-        # used to label messages as normal or anomalous
-        # accepts two dataframes of the same length containing the same number of signals
-        # returns a numpy array of 1s and 0s similar to the labels in df
-        real_values = self.evaluation_df.to_numpy()[:,1:]      # remove labels before reconstruction
+        stride = self.params['seq_stride']
+        steps = self.params['time_steps']
+        self.predictions = np.zeros(len(self.evaluation_df), dtype=int)
+        for i, prediction in zip(range(0, len(self.evaluation_df)-steps+1, stride), predictions):
+            if prediction == 1:
+                self.predictions[i:i+steps] = 1
+        real_values = self.evaluation_df.to_numpy()[:,1:]
         reconstructed_values = self.reconstructed_df.to_numpy()
         self.eval_se = np.square(real_values - reconstructed_values)
-         # if any signal is above respective threshold, prediction is 1 for that timestep
-        self.predictions = np.max(1*(self.eval_se > self.thresholds), axis=1)
         return
-
-    def get_accuracy(self, labels):
-        '''
-        DOCSTRING
-        '''
-        labels = self.evaluation_df['Label']
-        real_ranges = find_ranges(labels.to_numpy(), labels.index)
-        pred_ranges = find_ranges(self.predictions, labels.index)
-        num_correct = 0
-        for pred_start, pred_end in pred_ranges:
-            if pred_end - pred_start > 100:
-                correct = False
-                for real_start, real_end in real_ranges:
-                    if pred_start < real_end and pred_end > real_start:
-                        correct = True
-                if correct:
-                    num_correct += 1
-        if self.verbose:
-            print(f'Number of predicted anomalies: {len(pred_ranges)}')
-            print(f'Number of correct predictions: {num_correct}')
-        return num_correct / len(pred_ranges)
     
     def create_window_labels(self, message_labels):
         '''
         DOCSTRING
         '''
+        if self.verbose:
+            print('Labeling reconstructed subsequences...')
         labels = []
         stride = self.params['seq_stride']
         steps = self.params['time_steps']
-        for i in range(0, len(message_labels), stride)[:-1]:
+        for i in range(0, len(message_labels)-steps+1, stride):
             window = message_labels.iloc[i:i+steps]
             if len(window[window==1]) > 0:
                 labels.append(1)
             else:
                 labels.append(0)
-        return labels
+        return np.array(labels)
     
-    def get_predictions(self, labels, reconstructions):
+    def create_window_predictions(self, reconstructions):
         '''
         DOCSTRING
         '''
+        if self.verbose:
+            print('Creating window predictions...')
         predictions = []
-        for i, reconstruction in zip(range(0, len(self.evaluation_df), self.params['seq_stride'])[:-1], reconstructions):
+        indices = range(0, len(self.evaluation_df)-self.params['time_steps']+1, self.params['seq_stride'])
+        print(len(indices), len(reconstructions))
+        for i, reconstruction in zip(indices, reconstructions):
             real_values = self.evaluation_df.to_numpy()[i:i+self.params['time_steps'],1:]
             se = np.square(real_values - reconstruction)
-            pred = np.max(1*(se > self.thresholds), axis=1)
-            if np.sum(pred) > 0:
-                predictions.append(1)
-            else:
-                predictions.append(0)
-        return predictions
+            pred = 1*(se > self.thresholds)
+            prediction = 1 if np.sum(pred) > 0 else 0
+            predictions.append(prediction)
+        return np.array(predictions)
 
     def evaluate(self, model, eval_df, thresh_stds):
         '''
@@ -817,34 +801,28 @@ class SynCAN_Evaluator:
         self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
         message_labels = self.evaluation_df['Label']
+        window_labels = self.create_window_labels(message_labels)
+        print(f'Percentage of anomalous windows: {np.mean(window_labels==1)}')
+        window_predictions = self.create_window_predictions(reconstructions)
+        print(f'Percentage of anomalous predictions: {np.mean(window_predictions==1)}')
+        print(len(window_labels), len(window_predictions))
+        self.set_message_predictions(window_predictions)
+        accuracy = np.mean(np.array(window_predictions)==np.array(window_labels))
+        bal_accuracy = metrics.balanced_accuracy_score(window_labels, window_predictions)
+        f1_score = metrics.f1_score(window_labels, window_predictions)
+        precision = metrics.precision_score(window_labels, window_predictions)
+        recall = metrics.recall_score(window_labels, window_predictions)
         if self.verbose:
-            print('Labeling reconstructed subsequences...')
-        labels = self.create_window_labels(message_labels)
-        if self.verbose:
-            print('Creating predictions...')
-        predictions = self.get_predictions(labels, reconstructions)
-        self.set_predictions()
-        print(f'Accuracy: {np.mean(np.array(predictions)==np.array(labels)):.5}')
-        print(f'Balanced Accuracy: {metrics.balanced_accuracy_score(labels, predictions):.5}')
-        print(f'F1 Score: {metrics.f1_score(labels, predictions):.5}')
-        print(f'Precision Score: {metrics.precision_score(labels, predictions):.5}')
-        print(f'Recall Score: {metrics.recall_score(labels, predictions):.5}')
-        return
-
-    # def evaluate(self, model, eval_df, thresh_stds=2, plot_thresholds=False):
-    #     self.model = model
-    #     self.set_thresholds(thresh_stds, plot_thresholds)
-    #     evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
-    #     labels = self.evaluation_df['Label']
-    #     if self.verbose:
-    #         print(f'Reconstructing evaluation data...')
-    #     self.reconstructed_df = self.reconstruct(evaluation_ds)
-    #     self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
-    #     if self.verbose:
-    #         print('Predicting anomalies using thresholds...')
-    #     self.set_predictions()
-    #     print(f'\nAccuracy: {self.get_accuracy(labels):.5}\n\n')
-    #     return
+            print(f'Accuracy: {accuracy:.5}')
+            print(f'Balanced Accuracy: {bal_accuracy:.5}')
+            print(f'F1 Score: {f1_score:.5}')
+            print(f'Precision Score: {precision:.5}')
+            print(f'Recall Score: {recall:.5}')
+        return {'accuracy': accuracy,
+                'bal_accuracy': bal_accuracy,
+                'f1_score': f1_score,
+                'precision': precision,
+                'recall': recall}
 
     def visualize_reconstruction(self, start_time=0, end_time=None, highlight_anomalies=False, highlight_predictions=False, plot_squared_error=False):
         '''
