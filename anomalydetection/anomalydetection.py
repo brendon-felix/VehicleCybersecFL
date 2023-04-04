@@ -780,7 +780,6 @@ class SynCAN_Evaluator:
             print('Creating window predictions...')
         predictions = []
         indices = range(0, len(self.evaluation_df)-self.params['time_steps']+1, self.params['seq_stride'])
-        print(len(indices), len(reconstructions))
         for i, reconstruction in zip(indices, reconstructions):
             real_values = self.evaluation_df.to_numpy()[i:i+self.params['time_steps'],1:]
             se = np.square(real_values - reconstruction)
@@ -805,7 +804,6 @@ class SynCAN_Evaluator:
         print(f'Percentage of anomalous windows: {np.mean(window_labels==1)}')
         window_predictions = self.create_window_predictions(reconstructions)
         print(f'Percentage of anomalous predictions: {np.mean(window_predictions==1)}')
-        print(len(window_labels), len(window_predictions))
         self.set_message_predictions(window_predictions)
         accuracy = np.mean(np.array(window_predictions)==np.array(window_labels))
         bal_accuracy = metrics.balanced_accuracy_score(window_labels, window_predictions)
