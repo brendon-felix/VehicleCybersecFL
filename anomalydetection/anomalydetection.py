@@ -782,16 +782,18 @@ class SynCAN_Evaluator:
         '''
         if self.verbose:
             print('Creating window predictions...')
+        time_steps = self.params['time_steps']
         predictions = []
-        indices = range(0, len(self.evaluation_df)-self.params['time_steps']+1, self.params['seq_stride'])
-        for i, reconstruction in zip(indices, reconstructions):
-            real_values = self.evaluation_df.to_numpy()[i:i+self.params['time_steps'],1:]
+        indices = range(0, len(self.evaluation_df)-time_steps+1, self.params['seq_stride'])
+        values = self.evaluation_df.to_numpy()
+        predictions = np.zeros(len(indices), dtype=int)
+        for i, (j, reconstruction) in enumerate(zip(indices, reconstructions)):
+            real_values = values[j:j+time_steps,1:]
             se = np.square(real_values - reconstruction)
             pred = 1*(se > self.thresholds)
-            prediction = 1 if np.sum(pred) > 0 else 0
-            predictions.append(prediction)
+            predictions[i] = 1 if np.sum(pred) > 0 else 0
         return np.array(predictions)
-    
+
     def get_results(self, reconstructions):
         '''
         DOCSTRING
