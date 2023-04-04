@@ -791,7 +791,7 @@ class SynCAN_Evaluator:
             prediction = 1 if np.sum(pred) > 0 else 0
             predictions.append(prediction)
         return np.array(predictions)
-
+    
     def get_results(self, reconstructions):
         '''
         DOCSTRING
