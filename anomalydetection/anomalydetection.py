@@ -14,7 +14,7 @@ DEFINE GLOBAL FUNCTIONS
 _______________________________________________________________________________________________________________________
 '''
 
-def save_params(directory, params):
+def save_params(params, directory):
     '''
     DOCSTRING
     '''
