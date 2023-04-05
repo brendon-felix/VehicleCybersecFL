@@ -6,12 +6,36 @@ from sklearn import metrics
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os.path
+import pickle
 import time
 
 '''
 DEFINE GLOBAL FUNCTIONS
 _______________________________________________________________________________________________________________________
 '''
+
+def save_params(directory, params):
+    '''
+    DOCSTRING
+    '''
+    id = params['id']
+    signal_counts = [2, 3, 2, 1, 2, 2, 2, 1, 1, 4]  # number of signals used by each message ID
+    num_signals = signal_counts[id-1]
+    params['msg_id'] = 'id'+str(id)
+    params['num_signals'] = num_signals
+    params['input_dim'] = num_signals
+    params['latent_dim'] = 16 * num_signals
+    with open(directory + 'params.dict', 'wb') as f:
+        pickle.dump(params, f, pickle.HIGHEST_PROTOCOL)
+    return
+
+def load_params(directory):
+    '''
+    DOCSTRING
+    '''
+    with open(directory+'params.dict', 'rb') as f:
+        params = pickle.load(f)
+    return params
 
 def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports SynCAN csv into dataframe
     '''
@@ -38,7 +62,7 @@ def import_data(csv_path, msg_id=None, start_time=0, end_time=None):  # imports 
 
 def clean_labels(df, msg_id, real_ranges):
     '''
-    DOCSTRING
+    Takes a Pandas dataframe
     '''
     clean_df = df.copy()
     clean_df.Label = 0
@@ -49,7 +73,8 @@ def clean_labels(df, msg_id, real_ranges):
 def find_ranges(predictions, index):
     '''
     DOCSTRING
-    ''' # used for highlighting in plots
+    '''
+    # used for highlighting in plots
     # accepts a dataframe of 1s and 0s
     # returns a list of range tuples which contain a start and end index
     ranges = []
@@ -263,6 +288,7 @@ def plot_loss(model):
     '''
     DOCSTRING
     '''
+    # only works on FederatedLearning object
     loss_list = model.client_loss # list of lists for each clients' losses
     val_loss_list = model.val_loss_list # global loss list
 
@@ -277,9 +303,10 @@ def plot_loss(model):
 
 
 
-
-#DEFINE CLASSES
-#_______________________________________________________________________________________________________________________
+'''
+DEFINE CLASSES
+_______________________________________________________________________________________________________________________
+'''
 
 class CentralizedModel:
     '''
@@ -606,6 +633,7 @@ class FederatedLearning:
         if self.verbose:
             print()
         self.aggregator.iterate()
+
         if validate:
             min_loss = np.min(self.val_loss_list)
             self.validate_global_model()
@@ -641,6 +669,8 @@ class FederatedLearning:
         for i in range(num_iterations):
             if self.iterate(validation):    # early stop if validation loss increases
                 break
+        save_path = self.params['model_dir']+'global_model_final.h5'
+        tf.keras.models.save_model(self.aggregator.global_model, save_path)
         if test:
             self.test_global_model()
         return
