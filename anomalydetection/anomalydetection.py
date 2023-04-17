@@ -253,7 +253,8 @@ def get_train_val_test(df, params, verbose=False):
 
     train_df = df.iloc[:train_size]
     val_df = df.iloc[train_size:train_size+val_size]
-    test_df = df.iloc[-test_size:]
+    if test_size > 0:
+        test_df = df.iloc[-test_size:]
     time_steps = params['time_steps']
     seq_stride = params['seq_stride']
     warm_up = params['warm_up']
@@ -263,14 +264,19 @@ def get_train_val_test(df, params, verbose=False):
     if verbose:
         print(f'\nVal:')
     val_ds, val_df = create_dataset(val_df, params, verbose=verbose)
-    if verbose:
-        print(f'\nTest:')
-    test_ds, test_df = create_dataset(test_df, params, verbose=verbose)
+    if test_size > time_steps:
+        if verbose:
+            print(f'\nTest:')
+        test_ds, test_df = create_dataset(test_df, params, verbose=verbose)
     if verbose:
         print()
 
-    dataset_dict = {'train': train_ds, 'val': val_ds, 'test': test_ds}
-    dataframe_dict = {'train': train_df, 'val': val_df, 'test': test_df}
+    if test_size > time_steps:
+        dataset_dict = {'train': train_ds, 'val': val_ds, 'test': test_ds}
+        dataframe_dict = {'train': train_df, 'val': val_df, 'test': test_df}
+    else:
+        dataset_dict = {'train': train_ds, 'val': val_ds}
+        dataframe_dict = {'train': train_df, 'val': val_df}
     return dataset_dict, dataframe_dict
 
 def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False, attention=False):
@@ -755,6 +761,7 @@ class SynCAN_Evaluator:
         self.thresh_ds, self.thresh_df = create_dataset(thresh_df, params, verbose=verbose)
         self.params = params
         self.verbose = verbose
+        self.batch_results = None
         return
 
     def reconstruct(self, ds, ret_subseqs=False):
@@ -837,7 +844,7 @@ class SynCAN_Evaluator:
         return
 
     def set_message_predictions(self, predictions):
-        '''Create message-level predictions and set the evaluation squared error values
+        '''Create message-level predictions from windows predictions and set the evaluation squared error values
         '''
         stride = self.params['seq_stride']
         steps = self.params['time_steps']
@@ -890,31 +897,37 @@ class SynCAN_Evaluator:
         return np.array(predictions)
 
     def get_results(self, reconstructions):
-        '''Calculate metrics using the window labels and window predictions
+        '''Calculate metrics using the window labels and window predictions (assumes evaluate() was just called)
         Args:
             reconstructions (np.array): array of reconstructed subsequences
         Returns a dictionary with each metric score
         '''
-        window_predictions = self.create_window_predictions(reconstructions)
+        y = self.window_labels
+        y_hat = self.create_window_predictions(reconstructions)
         if self.verbose:
-            print(f'Percentage of anomalous predictions: {np.mean(window_predictions==1)*100:.3f}%')
-        self.set_message_predictions(window_predictions)
-        accuracy = np.mean(np.array(window_predictions)==np.array(self.window_labels))
-        bal_accuracy = metrics.balanced_accuracy_score(self.window_labels, window_predictions)
-        f1_score = metrics.f1_score(self.window_labels, window_predictions)
-        precision = metrics.precision_score(self.window_labels, window_predictions)
-        recall = metrics.recall_score(self.window_labels, window_predictions)
+            print(f'Percentage of anomalous predictions: {np.mean(y_hat==1)*100:.3f}%')
+        self.set_message_predictions(y_hat)
+        tn, fp, fn, tp = np.sum((y == 0) & (y_hat == 0)), np.sum((y == 0) & (y_hat == 1)), np.sum((y == 1) & (y_hat == 0)), np.sum((y == 1) & (y_hat == 1))
+        fp_rate = fp / (fp + tn)
+        tp_rate = tp / (tp + fn)
+        accuracy = np.mean(np.array(y_hat)==np.array(y))
+        bal_accuracy = metrics.balanced_accuracy_score(y, y_hat)
+        f1_score = metrics.f1_score(y, y_hat)
+        precision = metrics.precision_score(y, y_hat)
+        recall = metrics.recall_score(y, y_hat)
         if self.verbose:
             print(f'Accuracy: {accuracy:.5}')
             print(f'Balanced Accuracy: {bal_accuracy:.5}')
             print(f'F1 Score: {f1_score:.5}')
             print(f'Precision Score: {precision:.5}')
             print(f'Recall Score: {recall:.5}')
-        return {'accuracy': accuracy,
-                'bal_accuracy': bal_accuracy,
-                'f1_score': f1_score,
-                'precision': precision,
-                'recall': recall}
+        return {'False Positive Rate': fp_rate,
+                'True Positive Rate': tp_rate,
+                'Accuracy': accuracy,
+                'Balanced Accuracy': bal_accuracy,
+                'F1 Score': f1_score,
+                'Precision': precision,
+                'Recall': recall}
 
     def evaluate(self, model, eval_df, thresh_stds):
         '''Evaluate the given model using the given evalutaion data
@@ -941,7 +954,81 @@ class SynCAN_Evaluator:
                 print(f'\nThresholds set to {ts} standard deviations')
             self.set_thresholds(ts, plot=False)
             results.append(self.get_results(reconstructions))
-        return pd.DataFrame(results)
+        self.results_df = pd.DataFrame(results).set_index(thresh_stds)
+        return self.results_df
+    
+    def batch_evaluate(self, models, model_names, eval_df, thresh_stds):
+        '''Evaluate a list of models using the given evaluation data and store results
+        Args:
+            models (list(tf.keras.Model)): list of trained INDRA-like Keras models
+            eval_df (pd.DataFrame): dataframe containing values from a SynCAN attack test
+            thresh_stds (list-like): a list of std values used to evaluate the models
+        '''
+        self.model_names = model_names
+        self.batch_results = []
+        for model in models:
+            self.batch_results.append(self.evaluate(model, eval_df, thresh_stds))
+        return
+    
+    def plot_ROC(self, title=None, filename=None):
+        '''Plot the receiver operating characteristic curve (assumes evaluate() or batch_evaluate() was recently called)
+        Args:
+            title (str): optional title to use for the plot
+            filename (str): specify a filename to save a .png file
+        '''
+        if self.batch_results:
+            for results_df, name in zip(self.batch_results, self.model_names):
+                fp_rate = results_df['False Positive Rate']
+                tp_rate = results_df['True Positive Rate']
+                label = f'{name}, AUC: {metrics.auc(fp_rate, tp_rate):.3f}'
+                plt.plot(fp_rate, tp_rate, label=label)
+            plt.legend()
+        else:
+            fp_rate = self.results_df['False Positive Rate']
+            tp_rate = self.results_df['True Positive Rate']
+            label = f'AUC: {metrics.auc(fp_rate, tp_rate):.3f}'
+            plt.text(0.9, 0.1, label)
+            plt.plot(fp_rate, tp_rate)
+        if title:
+            plt.title(title)
+        else:
+            plt.title('ROC Curve')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        if filename:
+            plt.savefig(filename)
+        plt.show()
+        return
+    
+    def plot_PR(self, title=None, filename=None):
+        '''Plot the precision-recall curve (assumes evaluate() or batch_evaluate() was recently called)
+        Args:
+            title (str): optional title to use for the plot
+            filename (str): specify a filename to save a .png file
+        '''
+        if self.batch_results:
+            for results_df, name in zip(self.batch_results, self.model_names):
+                precision = results_df['Precision']
+                recall = results_df['Recall']
+                label = f'{name}, AUC: {metrics.auc(recall, precision):.3f}'
+                plt.plot(recall, precision, label=label)
+            plt.legend()
+        else:
+            precision = self.results_df['Precision']
+            recall = self.results_df['Recall']
+            plt.plot(recall, precision)
+            label = f'AUC: {metrics.auc(recall, precision):.3f}'
+            plt.text(0.1, 0.1, label)
+        if title:
+            plt.title(title)
+        else:
+            plt.title('Precision-Recall Curve')
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        if filename:
+            plt.savefig(filename)
+        plt.show()
+        return
     
     def visualize_reconstruction(self, start_time=0, end_time=None, highlight_anomalies=False, highlight_predictions=False, plot_squared_error=False):
         '''Visualize the current evaluation data and reconstruction
