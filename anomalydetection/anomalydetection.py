@@ -980,11 +980,14 @@ class SynCAN_Evaluator:
             for results_df, name in zip(self.batch_results, self.model_names):
                 fp_rate = results_df['False Positive Rate']
                 tp_rate = results_df['True Positive Rate']
-                plt.plot(fp_rate, tp_rate, label=name)
+                label = f'{name}, AUC: {metrics.auc(fp_rate, tp_rate):.3f}'
+                plt.plot(fp_rate, tp_rate, label=label)
             plt.legend()
         else:
             fp_rate = self.results_df['False Positive Rate']
             tp_rate = self.results_df['True Positive Rate']
+            label = f'AUC: {metrics.auc(fp_rate, tp_rate):.3f}'
+            plt.text(0.9, 0.1, label)
             plt.plot(fp_rate, tp_rate)
         if title:
             plt.title(title)
@@ -1007,12 +1010,15 @@ class SynCAN_Evaluator:
             for results_df, name in zip(self.batch_results, self.model_names):
                 precision = results_df['Precision']
                 recall = results_df['Recall']
-                plt.plot(recall, precision, label=name)
+                label = f'{name}, AUC: {metrics.auc(recall, precision):.3f}'
+                plt.plot(recall, precision, label=label)
             plt.legend()
         else:
             precision = self.results_df['Precision']
             recall = self.results_df['Recall']
             plt.plot(recall, precision)
+            label = f'AUC: {metrics.auc(recall, precision):.3f}'
+            plt.text(0.1, 0.1, label)
         if title:
             plt.title(title)
         else:
