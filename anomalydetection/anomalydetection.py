@@ -843,130 +843,38 @@ class SynCAN_Evaluator:
         plt.show()
         return
 
-    # def set_message_predictions(self, predictions):
-    #     '''Create message-level predictions from windows predictions and set the evaluation squared error values
-    #     '''
-    #     stride = self.params['seq_stride']
-    #     steps = self.params['time_steps']
-    #     self.predictions = np.zeros(len(self.evaluation_df), dtype=int)
-    #     for i, prediction in zip(range(0, len(self.evaluation_df)-steps+1, stride), predictions):
-    #         if prediction == 1:
-    #             self.predictions[i:i+steps] = 1
-    #     real_values = self.evaluation_df.to_numpy()[:,1:]
-    #     reconstructed_values = self.reconstructed_df.to_numpy()
-    #     self.eval_se = np.square(real_values - reconstructed_values)
-    #     return
-    
-    # def create_window_labels(self, message_labels):
-    #     '''Create one label for each evaluation subsequence
-    #     Args:
-    #         message_labels (np.array): array of message specific labels
-    #     Returns an np.array containing one label for each input subsequence
-    #     '''
-    #     if self.verbose:
-    #         print('Labeling reconstructed subsequences...')
-    #     labels = []
-    #     stride = self.params['seq_stride']
-    #     steps = self.params['time_steps']
-    #     for i in range(0, len(message_labels)-steps+1, stride):
-    #         window = message_labels.iloc[i:i+steps]
-    #         if len(window[window==1]) > 0:
-    #             labels.append(1)
-    #         else:
-    #             labels.append(0)
-    #     return np.array(labels)
-    
-    # def create_window_predictions(self, reconstructions):
-    #     '''Create one label for each reconstructed subsequence
-    #     Args:
-    #         reconstructions (np.array): array of reconstructed subsequences
-    #     Returns an np.array containing one label for each reconstructed subsequence
-    #     '''
-    #     if self.verbose:
-    #         print('Creating window predictions...')
-    #     time_steps = self.params['time_steps']
-    #     predictions = []
-    #     indices = range(0, len(self.evaluation_df)-time_steps+1, self.params['seq_stride'])
-    #     values = self.evaluation_df.to_numpy()
-    #     predictions = np.zeros(len(indices), dtype=int)
-    #     for i, (j, reconstruction) in enumerate(zip(indices, reconstructions)):
-    #         real_values = values[j:j+time_steps,1:]
-    #         se = np.square(real_values - reconstruction)
-    #         pred = 1*(se > self.thresholds)
-    #         predictions[i] = 1 if np.sum(pred) > 0 else 0
-    #     return np.array(predictions)
-
-    # def get_results(self, reconstructions):
-    #     '''Calculate metrics using the window labels and window predictions (assumes evaluate() was just called)
-    #     Args:
-    #         reconstructions (np.array): array of reconstructed subsequences
-    #     Returns a dictionary with each metric score
-    #     '''
-    #     y = self.window_labels
-    #     y_hat = self.create_window_predictions(reconstructions)
-    #     if self.verbose:
-    #         print(f'Percentage of anomalous predictions: {np.mean(y_hat==1)*100:.3f}%')
-    #     self.set_message_predictions(y_hat)
-    #     tn, fp, fn, tp = np.sum((y == 0) & (y_hat == 0)), np.sum((y == 0) & (y_hat == 1)), np.sum((y == 1) & (y_hat == 0)), np.sum((y == 1) & (y_hat == 1))
-    #     fp_rate = fp / (fp + tn)
-    #     tp_rate = tp / (tp + fn)
-    #     accuracy = np.mean(np.array(y_hat)==np.array(y))
-    #     bal_accuracy = metrics.balanced_accuracy_score(y, y_hat)
-    #     f1_score = metrics.f1_score(y, y_hat)
-    #     precision = metrics.precision_score(y, y_hat)
-    #     recall = metrics.recall_score(y, y_hat)
-    #     if self.verbose:
-    #         print(f'Accuracy: {accuracy:.5}')
-    #         print(f'Balanced Accuracy: {bal_accuracy:.5}')
-    #         print(f'F1 Score: {f1_score:.5}')
-    #         print(f'Precision Score: {precision:.5}')
-    #         print(f'Recall Score: {recall:.5}')
-    #     return {'False Positive Rate': fp_rate,
-    #             'True Positive Rate': tp_rate,
-    #             'Accuracy': accuracy,
-    #             'Balanced Accuracy': bal_accuracy,
-    #             'F1 Score': f1_score,
-    #             'Precision': precision,
-    #             'Recall': recall}
-    
-    # def evaluate(self, model, eval_df, thresh_stds):
-    #     '''Evaluate the given model using the given evalutaion data
-    #     Args:
-    #         model (tf.keras.Model): a trained INDRA-like Keras model
-    #         eval_df (pd.DataFrame): dataframe containing values from a SynCAN attack test
-    #         thresh_stds (list-like): a list of std values used to evaluate the model
-    #     Returns a pd.DataFrame containing the metric results for each threshold value
-    #     '''
-    #     self.model = model
-    #     self.reconstruct_threshold_data()
-    #     evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
-    #     if self.verbose:
-    #         print(f'Reconstructing evaluation data...')
-    #     self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
-    #     self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
-    #     message_labels = self.evaluation_df['Label']
-    #     self.window_labels = self.create_window_labels(message_labels)
-    #     if self.verbose:
-    #         print(f'Percentage of anomalous windows: {np.mean(self.window_labels==1)*100:.3f}%')
-    #     # if self.verbose:
-    #     #     print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
-    #     results = []
-    #     for ts in list(thresh_stds):
-    #         if self.verbose:
-    #             print(f'\nThresholds set to {ts} standard deviations')
-    #         self.set_thresholds(ts, plot=False)
-    #         results.append(self.get_results(reconstructions))
-    #     self.results_df = pd.DataFrame(results).set_index(thresh_stds)
-    #     return self.results_df
-
-    def set_message_predictions(self):
-        '''Create message-level predictions and set the evaluation squared error values
+    def set_message_predictions(self, predictions):
+        '''Create message-level predictions from windows predictions and set the evaluation squared error values
         '''
+        stride = self.params['seq_stride']
+        steps = self.params['time_steps']
+        self.predictions = np.zeros(len(self.evaluation_df), dtype=int)
+        for i, prediction in zip(range(0, len(self.evaluation_df)-steps+1, stride), predictions):
+            if prediction == 1:
+                self.predictions[i:i+steps] = 1
         real_values = self.evaluation_df.to_numpy()[:,1:]
         reconstructed_values = self.reconstructed_df.to_numpy()
         self.eval_se = np.square(real_values - reconstructed_values)
-        self.predictions = 1*(self.eval_se > self.thresholds)
         return
+    
+    def create_window_labels(self, message_labels):
+        '''Create one label for each evaluation subsequence
+        Args:
+            message_labels (np.array): array of message specific labels
+        Returns an np.array containing one label for each input subsequence
+        '''
+        if self.verbose:
+            print('Labeling reconstructed subsequences...')
+        labels = []
+        stride = self.params['seq_stride']
+        steps = self.params['time_steps']
+        for i in range(0, len(message_labels)-steps+1, stride):
+            window = message_labels.iloc[i:i+steps]
+            if len(window[window==1]) > 0:
+                labels.append(1)
+            else:
+                labels.append(0)
+        return np.array(labels)
     
     def create_window_predictions(self, reconstructions):
         '''Create one label for each reconstructed subsequence
@@ -994,11 +902,11 @@ class SynCAN_Evaluator:
             reconstructions (np.array): array of reconstructed subsequences
         Returns a dictionary with each metric score
         '''
-        self.set_message_predictions()
-        y = self.evaluation_df['Label']
-        y_hat = self.predictions
+        y = self.window_labels
+        y_hat = self.create_window_predictions(reconstructions)
         if self.verbose:
             print(f'Percentage of anomalous predictions: {np.mean(y_hat==1)*100:.3f}%')
+        self.set_message_predictions(y_hat)
         tn, fp, fn, tp = np.sum((y == 0) & (y_hat == 0)), np.sum((y == 0) & (y_hat == 1)), np.sum((y == 1) & (y_hat == 0)), np.sum((y == 1) & (y_hat == 1))
         fp_rate = fp / (fp + tn)
         tp_rate = tp / (tp + fn)
@@ -1020,7 +928,7 @@ class SynCAN_Evaluator:
                 'F1 Score': f1_score,
                 'Precision': precision,
                 'Recall': recall}
-
+    
     def evaluate(self, model, eval_df, thresh_stds):
         '''Evaluate the given model using the given evalutaion data
         Args:
@@ -1036,8 +944,12 @@ class SynCAN_Evaluator:
             print(f'Reconstructing evaluation data...')
         self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
+        message_labels = self.evaluation_df['Label']
+        self.window_labels = self.create_window_labels(message_labels)
         if self.verbose:
-            print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
+            print(f'Percentage of anomalous windows: {np.mean(self.window_labels==1)*100:.3f}%')
+        # if self.verbose:
+        #     print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
         results = []
         for ts in list(thresh_stds):
             if self.verbose:
@@ -1046,6 +958,94 @@ class SynCAN_Evaluator:
             results.append(self.get_results(reconstructions))
         self.results_df = pd.DataFrame(results).set_index(thresh_stds)
         return self.results_df
+
+    # def set_message_predictions(self):
+    #     '''Create message-level predictions and set the evaluation squared error values
+    #     '''
+    #     real_values = self.evaluation_df.to_numpy()[:,1:]
+    #     reconstructed_values = self.reconstructed_df.to_numpy()
+    #     self.eval_se = np.square(real_values - reconstructed_values)
+    #     self.predictions = 1*(self.eval_se > self.thresholds)
+    #     return
+    
+    # def create_window_predictions(self, reconstructions):
+    #     '''Create one label for each reconstructed subsequence
+    #     Args:
+    #         reconstructions (np.array): array of reconstructed subsequences
+    #     Returns an np.array containing one label for each reconstructed subsequence
+    #     '''
+    #     if self.verbose:
+    #         print('Creating window predictions...')
+    #     time_steps = self.params['time_steps']
+    #     predictions = []
+    #     indices = range(0, len(self.evaluation_df)-time_steps+1, self.params['seq_stride'])
+    #     values = self.evaluation_df.to_numpy()
+    #     predictions = np.zeros(len(indices), dtype=int)
+    #     for i, (j, reconstruction) in enumerate(zip(indices, reconstructions)):
+    #         real_values = values[j:j+time_steps,1:]
+    #         se = np.square(real_values - reconstruction)
+    #         pred = 1*(se > self.thresholds)
+    #         predictions[i] = 1 if np.sum(pred) > 0 else 0
+    #     return np.array(predictions)
+
+    # def get_results(self, reconstructions):
+    #     '''Calculate metrics using the window labels and window predictions (assumes evaluate() was just called)
+    #     Args:
+    #         reconstructions (np.array): array of reconstructed subsequences
+    #     Returns a dictionary with each metric score
+    #     '''
+    #     self.set_message_predictions()
+    #     y = self.evaluation_df['Label']
+    #     y_hat = self.predictions
+    #     if self.verbose:
+    #         print(f'Percentage of anomalous predictions: {np.mean(y_hat==1)*100:.3f}%')
+    #     tn, fp, fn, tp = np.sum((y == 0) & (y_hat == 0)), np.sum((y == 0) & (y_hat == 1)), np.sum((y == 1) & (y_hat == 0)), np.sum((y == 1) & (y_hat == 1))
+    #     fp_rate = fp / (fp + tn)
+    #     tp_rate = tp / (tp + fn)
+    #     accuracy = np.mean(np.array(y_hat)==np.array(y))
+    #     bal_accuracy = metrics.balanced_accuracy_score(y, y_hat)
+    #     f1_score = metrics.f1_score(y, y_hat)
+    #     precision = metrics.precision_score(y, y_hat)
+    #     recall = metrics.recall_score(y, y_hat)
+    #     if self.verbose:
+    #         print(f'Accuracy: {accuracy:.5}')
+    #         print(f'Balanced Accuracy: {bal_accuracy:.5}')
+    #         print(f'F1 Score: {f1_score:.5}')
+    #         print(f'Precision Score: {precision:.5}')
+    #         print(f'Recall Score: {recall:.5}')
+    #     return {'False Positive Rate': fp_rate,
+    #             'True Positive Rate': tp_rate,
+    #             'Accuracy': accuracy,
+    #             'Balanced Accuracy': bal_accuracy,
+    #             'F1 Score': f1_score,
+    #             'Precision': precision,
+    #             'Recall': recall}
+
+    # def evaluate(self, model, eval_df, thresh_stds):
+    #     '''Evaluate the given model using the given evalutaion data
+    #     Args:
+    #         model (tf.keras.Model): a trained INDRA-like Keras model
+    #         eval_df (pd.DataFrame): dataframe containing values from a SynCAN attack test
+    #         thresh_stds (list-like): a list of std values used to evaluate the model
+    #     Returns a pd.DataFrame containing the metric results for each threshold value
+    #     '''
+    #     self.model = model
+    #     self.reconstruct_threshold_data()
+    #     evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
+    #     if self.verbose:
+    #         print(f'Reconstructing evaluation data...')
+    #     self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
+    #     self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
+    #     if self.verbose:
+    #         print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
+    #     results = []
+    #     for ts in list(thresh_stds):
+    #         if self.verbose:
+    #             print(f'\nThresholds set to {ts} standard deviations')
+    #         self.set_thresholds(ts, plot=False)
+    #         results.append(self.get_results(reconstructions))
+    #     self.results_df = pd.DataFrame(results).set_index(thresh_stds)
+    #     return self.results_df
     
     def batch_evaluate(self, models, model_names, eval_df, thresh_stds):
         '''Evaluate a list of models using the given evaluation data and store results
