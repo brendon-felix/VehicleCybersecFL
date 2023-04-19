@@ -1,3 +1,4 @@
+from functions import *
 class CentralizedModel:
     '''Class for creating and training a centralized (conventional) INDRA-like model
     '''
