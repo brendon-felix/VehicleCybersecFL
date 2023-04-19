@@ -1,3 +1,4 @@
+from functions import *
 class FederatedAggregator:
     '''This class is used to perform aggregation on saved clients models which may be training on a separate runtime
     '''

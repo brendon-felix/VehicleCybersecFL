@@ -21,21 +21,30 @@ def download_SynCAN(num_train_files=4):
     Args:
         num_train_files (int): optional, specify number of training files to use (out of 4)
     '''
-    bash_commands = [
-        "git clone https://github.com/etas/SynCAN.git",
-        "unzip ./SynCAN/*.zip -d ./SynCAN"
-    ]
-    for command in bash_commands:
-        process = subprocess.call(command.split(), stdout=subprocess.PIPE)
-
-    train_file = open("SynCAN/train.csv", "w")
-    for i in range(num_train_files):
-        command = "cat ./SynCAN/train_"+str(i+1)+".csv"
-        process = subprocess.call(command.split(), stdout=train_file)
-    for f in glob.glob("/content/SynCAN/train_*"):
-        os.remove(f)
+    if num_train_files > 4 or num_train_files < 0:
+        print('Parameter `num_train_files` must be between 0 and 4')
+        return
+    print(f'Cloning GitHub repository...', end='')
+    command = "git clone https://github.com/etas/SynCAN.git"
+    process = subprocess.call(command.split(), stdout=subprocess.PIPE)
+    print(f'\rUnzipping all test files...', end='')
+    command = "unzip ./SynCAN/test*.zip -d ./SynCAN"
+    process = subprocess.call(command.split(), stdout=subprocess.PIPE)
+    if num_train_files > 0:
+        train_file = open("SynCAN/train.csv", "w")
+        for i in range(num_train_files):
+            print(f'\rUnzipping and concatenating train file {i+1}...', end='')
+            command = "unzip ./SynCAN/train_"+str(i+1)+".zip -d ./SynCAN"
+            process = subprocess.call(command.split(), stdout=subprocess.PIPE)
+            command = "cat ./SynCAN/train_"+str(i+1)+".csv"
+            process = subprocess.call(command.split(), stdout=train_file)
+        print(f'\rRemoving train files...', end='')
+        for f in glob.glob("/content/SynCAN/train_*"):
+            os.remove(f)
+    print(f'\rRemoving all zip files...', end='')
     for f in glob.glob("/content/SynCAN/*.zip"):
         os.remove(f)
+    print(f'\rFinished')
     return
 
 def save_params(params, directory):
