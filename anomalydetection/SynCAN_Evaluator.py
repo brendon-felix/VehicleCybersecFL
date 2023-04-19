@@ -205,7 +205,7 @@ class SynCAN_Evaluator:
         #     print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
         results = []
         for i, ts in enumerate(list(thresh_stds)):
-            print(f'\rUsing threshold {i+1}/len(list(thresh_stds))', end='')
+            print(f'\rUsing threshold {i+1}/{len(list(thresh_stds))}', end='')
             if self.verbose:
                 print(f'\nThresholds set to {ts} standard deviations')
             self.set_thresholds(ts, plot=False)
