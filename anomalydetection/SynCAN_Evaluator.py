@@ -222,7 +222,7 @@ class SynCAN_Evaluator:
         print(f'\rUsing threshold {len(thresh_stds)+2}/{len(thresh_stds)+2}', end='')
         self.set_thresholds(None, plot=False, max=True)
         results.append(self.get_results(reconstructions))
-        self.results_df = pd.DataFrame(results).set_index(thresh_stds)
+        self.results_df = pd.DataFrame(results).set_index(['min']+thresh_stds+['max'])
         return self.results_df
 
     # def set_message_predictions(self):
