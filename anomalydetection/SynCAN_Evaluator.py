@@ -311,7 +311,8 @@ class SynCAN_Evaluator:
         '''
         self.model_names = model_names
         self.batch_results = []
-        for model in models:
+        for model, model_name in zip(models, model_names):
+            print(f'Evaluating {model_name}')
             self.batch_results.append(self.evaluate(model, eval_df, thresh_stds))
         return
     
