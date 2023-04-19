@@ -1,3 +1,4 @@
+from functions import *
 class SynCAN_Evaluator:
     '''Class used perform anomaly detection evaluation for INDRA-like models
     '''
