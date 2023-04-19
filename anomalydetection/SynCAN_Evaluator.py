@@ -1,3 +1,4 @@
+from functions import *
 class SynCAN_Evaluator:
     '''Class used perform anomaly detection evaluation for INDRA-like models
     '''
@@ -52,14 +53,18 @@ class SynCAN_Evaluator:
         self.thresh_se = np.square(real_values - reconstructed_values)
         return
     
-    def set_thresholds(self, num_stds, plot=False):
+    def set_thresholds(self, num_stds, plot=False, min=False, max=False):
         '''Set a threshold for each message signal
         Args:
             num_stds (int/float): number of standard deviations from the mean used for thresholds
             plot (bool): create a plot showing the thresholds relative to the threshold reconstruction errors
         '''
-        self.thresholds = self.thresh_se.mean(axis=0) + (num_stds * self.thresh_se.std(axis=0))
-        # self.thresholds = np.max(thresh_se, axis=0)
+        if min:
+            self.thresholds = np.min(self.thresh_se, axis=0)
+        elif max:
+            self.thresholds = np.max(self.thresh_se, axis=0)
+        else:
+            self.thresholds = self.thresh_se.mean(axis=0) + (num_stds * self.thresh_se.std(axis=0))
         if self.verbose:
             print('Setting squared-error thresholds...')
             for i, t in enumerate(self.thresholds):
@@ -144,7 +149,7 @@ class SynCAN_Evaluator:
         for i, (j, reconstruction) in enumerate(zip(indices, reconstructions)):
             real_values = values[j:j+time_steps,1:]
             se = np.square(real_values - reconstruction)
-            pred = 1*(se > self.thresholds)
+            pred = 1*(se >= self.thresholds)
             predictions[i] = 1 if np.sum(pred) > 0 else 0
         return np.array(predictions)
 
@@ -203,12 +208,21 @@ class SynCAN_Evaluator:
         # if self.verbose:
         #     print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
         results = []
-        for ts in list(thresh_stds):
+        thresh_stds = list(thresh_stds)
+        print(f'\rUsing threshold {1}/{len(thresh_stds)+2}', end='')
+        self.set_thresholds(None, plot=False, min=True)
+        results.append(self.get_results(reconstructions))
+        for i, ts in enumerate(thresh_stds):
+            print(f'\rUsing threshold {i+1}/{len(thresh_stds)+2}', end='')
             if self.verbose:
                 print(f'\nThresholds set to {ts} standard deviations')
             self.set_thresholds(ts, plot=False)
             results.append(self.get_results(reconstructions))
-        self.results_df = pd.DataFrame(results).set_index(thresh_stds)
+        print()
+        print(f'\rUsing threshold {len(thresh_stds)+2}/{len(thresh_stds)+2}', end='')
+        self.set_thresholds(None, plot=False, max=True)
+        results.append(self.get_results(reconstructions))
+        self.results_df = pd.DataFrame(results).set_index(['min']+thresh_stds+['max'])
         return self.results_df
 
     # def set_message_predictions(self):
@@ -308,7 +322,8 @@ class SynCAN_Evaluator:
         '''
         self.model_names = model_names
         self.batch_results = []
-        for model in models:
+        for model, model_name in zip(models, model_names):
+            print(f'Evaluating {model_name}')
             self.batch_results.append(self.evaluate(model, eval_df, thresh_stds))
         return
     
