@@ -5,7 +5,9 @@ from keras import layers
 from sklearn import metrics
 import seaborn as sns
 import matplotlib.pyplot as plt
-import os.path
+import os
+import subprocess
+import glob
 import pickle
 import time
 
@@ -13,6 +15,28 @@ import time
 DEFINE GLOBAL FUNCTIONS
 _______________________________________________________________________________________________________________________
 '''
+
+def download_SynCAN(num_train_files=4):
+    '''Clone the SyCAN repository, unzip and clean files
+    Args:
+        num_train_files (int): optional, specify number of training files to use (out of 4)
+    '''
+    bash_commands = [
+        "git clone https://github.com/etas/SynCAN.git",
+        "unzip ./SynCAN/*.zip -d ./SynCAN"
+    ]
+    for command in bash_commands:
+        process = subprocess.call(command.split(), stdout=subprocess.PIPE)
+
+    train_file = open("SynCAN/train.csv", "w")
+    for i in range(num_train_files):
+        command = "cat ./SynCAN/train_"+str(i+1)+".csv"
+        process = subprocess.call(command.split(), stdout=train_file)
+    for f in glob.glob("/content/SynCAN/train_*"):
+        os.remove(f)
+    for f in glob.glob("/content/SynCAN/*.zip"):
+        os.remove(f)
+    return
 
 def save_params(params, directory):
     '''Used by server to save a params file which can be used by remote clients
