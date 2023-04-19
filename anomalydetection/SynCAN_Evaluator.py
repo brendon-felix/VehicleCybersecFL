@@ -1,3 +1,4 @@
+from functions import *
 class SynCAN_Evaluator:
     '''Class used perform anomaly detection evaluation for INDRA-like models
     '''
@@ -203,11 +204,13 @@ class SynCAN_Evaluator:
         # if self.verbose:
         #     print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
         results = []
-        for ts in list(thresh_stds):
+        for i, ts in enumerate(list(thresh_stds)):
+            print(f'\rUsing threshold {i+1}/{len(list(thresh_stds))}', end='')
             if self.verbose:
                 print(f'\nThresholds set to {ts} standard deviations')
             self.set_thresholds(ts, plot=False)
             results.append(self.get_results(reconstructions))
+        print()
         self.results_df = pd.DataFrame(results).set_index(thresh_stds)
         return self.results_df
 
@@ -308,7 +311,8 @@ class SynCAN_Evaluator:
         '''
         self.model_names = model_names
         self.batch_results = []
-        for model in models:
+        for model, model_name in zip(models, model_names):
+            print(f'Evaluating {model_name}')
             self.batch_results.append(self.evaluate(model, eval_df, thresh_stds))
         return
     
