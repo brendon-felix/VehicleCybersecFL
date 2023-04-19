@@ -1,3 +1,4 @@
+from functions import *
 class FederatedClient:
     '''Class for an individual client used in federated learning
     '''

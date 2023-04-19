@@ -1,3 +1,4 @@
+from functions import *
 class FederatedLearning:
     '''Class used for simulating federated learning on one or multiple runtimes
     '''
