@@ -195,10 +195,10 @@ class SynCAN_Evaluator:
         Returns a pd.DataFrame containing the metric results for each threshold value
         '''
         self.model = model
+        print(f'\rReconstructing threshold-selection data...', end='')
         self.reconstruct_threshold_data()
         evaluation_ds, self.evaluation_df = create_dataset(eval_df, self.params, verbose=self.verbose)
-        if self.verbose:
-            print(f'Reconstructing evaluation data...')
+        print(f'\rReconstructing evaluation data...', end='')
         self.reconstructed_df, reconstructions = self.reconstruct(evaluation_ds, ret_subseqs=True)
         self.reconstructed_df.set_index(self.evaluation_df.index, inplace=True)
         message_labels = self.evaluation_df['Label']
@@ -209,20 +209,19 @@ class SynCAN_Evaluator:
         #     print(f'Percentage of anomalous messages: {np.mean(self.evaluation_df.Label==1)*100:.3f}%')
         results = []
         thresh_stds = list(thresh_stds)
-        print(f'\rUsing threshold {1}/{len(thresh_stds)+2}', end='')
+        print(f'\rUsing threshold {1}/{len(thresh_stds)+2}: min', end='')
         self.set_thresholds(None, plot=False, min=True)
         results.append(self.get_results(reconstructions))
         for i, ts in enumerate(thresh_stds):
-            print(f'\rUsing threshold {i+1}/{len(thresh_stds)+2}', end='')
-            if self.verbose:
-                print(f'\nThresholds set to {ts} standard deviations')
+            print(f'\rUsing threshold {i+1}/{len(thresh_stds)+2}: {ts:.4f}', end='')
             self.set_thresholds(ts, plot=False)
             results.append(self.get_results(reconstructions))
+        print(f'\rUsing threshold {len(thresh_stds)+2}/{len(thresh_stds)+2}: max', end='')
         print()
-        print(f'\rUsing threshold {len(thresh_stds)+2}/{len(thresh_stds)+2}', end='')
         self.set_thresholds(None, plot=False, max=True)
         results.append(self.get_results(reconstructions))
-        self.results_df = pd.DataFrame(results).set_index(['min']+thresh_stds+['max'])
+        self.results_df = pd.DataFrame(results)
+        # self.results_df.set_index(['min']+thresh_stds+['max'])
         return self.results_df
 
     # def set_message_predictions(self):
@@ -323,7 +322,7 @@ class SynCAN_Evaluator:
         self.model_names = model_names
         self.batch_results = []
         for model, model_name in zip(models, model_names):
-            print(f'Evaluating {model_name}')
+            print(f'Evaluating model \"{model_name}\"')
             self.batch_results.append(self.evaluate(model, eval_df, thresh_stds))
         return
     
@@ -334,16 +333,24 @@ class SynCAN_Evaluator:
             filename (str): specify a filename to save a .png file
         '''
         if self.batch_results:
+            auc_val = {}
             for results_df, name in zip(self.batch_results, self.model_names):
                 fp_rate = results_df['False Positive Rate']
+                fp_rate = list(fp_rate)+[0]
                 tp_rate = results_df['True Positive Rate']
-                label = f'{name}, AUC: {metrics.auc(fp_rate, tp_rate):.3f}'
+                tp_rate = list(tp_rate)+[0]
+                auc = metrics.auc(fp_rate, tp_rate)
+                auc_val[name] = auc
+                label = f'{name}, AUC: {auc:.3f}'
                 plt.plot(fp_rate, tp_rate, label=label)
             plt.legend()
         else:
             fp_rate = self.results_df['False Positive Rate']
+            fp_rate = list(fp_rate)+[0]
             tp_rate = self.results_df['True Positive Rate']
-            label = f'AUC: {metrics.auc(fp_rate, tp_rate):.3f}'
+            tp_rate = list(tp_rate)+[0]
+            auc_val = metrics.auc(fp_rate, tp_rate)
+            label = f'AUC: {auc_val:.3f}'
             plt.text(0.9, 0.1, label)
             plt.plot(fp_rate, tp_rate)
         if title:
@@ -355,7 +362,7 @@ class SynCAN_Evaluator:
         if filename:
             plt.savefig(filename)
         plt.show()
-        return
+        return auc_val
     
     def plot_PR(self, title=None, filename=None):
         '''Plot the precision-recall curve (assumes evaluate() or batch_evaluate() was recently called)
@@ -366,13 +373,17 @@ class SynCAN_Evaluator:
         if self.batch_results:
             for results_df, name in zip(self.batch_results, self.model_names):
                 precision = results_df['Precision']
+                precision = list(precision)+[1]
                 recall = results_df['Recall']
+                recall = list(recall)+[0]
                 label = f'{name}, AUC: {metrics.auc(recall, precision):.3f}'
                 plt.plot(recall, precision, label=label)
             plt.legend()
         else:
             precision = self.results_df['Precision']
+            precision = list(precision)+[1]
             recall = self.results_df['Recall']
+            recall = list(recall)+[0]
             plt.plot(recall, precision)
             label = f'AUC: {metrics.auc(recall, precision):.3f}'
             plt.text(0.1, 0.1, label)
