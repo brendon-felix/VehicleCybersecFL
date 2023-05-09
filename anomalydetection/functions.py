@@ -314,6 +314,8 @@ def get_train_val_test(df, params, verbose=False):
 
 def autoencoder(time_steps, warm_up, input_dim, latent_dim, drop_out=False, attention=False):
     '''Function used to create an INDRA-like recurrent autoencoder Keras model
+    INDRA was developed by Kukkala et al. at the EPiC Research Lab of Colorado State University.
+    The INDRA paper can be found here: https://ieeexplore.ieee.org/document/9211565
     Args:
         time_steps (int): number of time steps used in each sample (subsequence length)
         warm_up (int): number of beginning time steps used in the input before any output is given
